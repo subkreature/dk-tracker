@@ -13,7 +13,12 @@ start_time = datetime.now()
 print(f"Session started: {start_time}")
 
 subprocess.run(
-    ["./mame", "dkong"],
+    [
+        "./mame",
+        "dkong",
+        "-plugin",
+        "dktracker"
+    ],
     cwd="/Users/nick/Downloads/mame0286-x86"
 )
 

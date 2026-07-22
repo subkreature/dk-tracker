@@ -1,0 +1,10 @@
+{
+	"plugin": {
+		"name": "dktracker",
+		"description": "Donkey Kong Tracker",
+		"version": "0.0.1",
+		"author": "Nick",
+		"type": "plugin",
+		"start": "true"
+	}
+}
