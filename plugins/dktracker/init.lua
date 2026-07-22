@@ -25,7 +25,7 @@ end
 function dktracker.startplugin()
 
     print("=================================")
-    print("DK Tracker loaded!")
+    print("DK Tracker loaded from DK-Tracker project!")
     print("=================================")
 
 local pathfile = io.open("score_path.txt", "r")
