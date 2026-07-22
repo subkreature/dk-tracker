@@ -33,6 +33,10 @@ print(f"Duration: {duration}")
 
 data_folder = Path("data")
 data_folder.mkdir(exist_ok=True)
+score_file = data_folder / "score_log.csv"
+
+with open("score_path.txt", "w") as file:
+    file.write(str(score_file.resolve()))
 
 csv_file = data_folder / "sessions.csv"
 
