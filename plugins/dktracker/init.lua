@@ -1,6 +1,6 @@
 local exports = {
     name = "dktracker",
-    version = "0.0.9",
+    version = "0.1.0",
     description = "Donkey Kong Tracker",
     license = "MIT",
     author = { name = "Nick" }
@@ -45,6 +45,25 @@ local function read_score(space)
         bcd_to_decimal(low_byte) * 100
 end
 
+local function read_path_file(filename)
+    local pathfile = io.open(filename, "r")
+
+    if not pathfile then
+        print("ERROR: Could not open " .. filename)
+        return nil
+    end
+
+    local path = pathfile:read("*line")
+    pathfile:close()
+
+    if not path or path == "" then
+        print("ERROR: " .. filename .. " was empty")
+        return nil
+    end
+
+    return path
+end
+
 ----------------------------------------------------------
 -- Plugin
 ----------------------------------------------------------
@@ -57,32 +76,54 @@ function dktracker.startplugin()
     print("=================================")
 
     ------------------------------------------------------
-    -- Open score log
+    -- Resolve output paths
     ------------------------------------------------------
 
-    local pathfile = io.open("score_path.txt", "r")
+    local score_path = read_path_file("score_path.txt")
 
-    if not pathfile then
-        print("ERROR: Could not find score_path.txt")
+    if not score_path then
         return
     end
 
-    local score_path = pathfile:read("*line")
-    pathfile:close()
+    local events_path = read_path_file("events_path.txt")
 
-    local logfile = io.open(score_path, "w")
+    if not events_path then
+        return
+    end
 
-    if not logfile then
+    ------------------------------------------------------
+    -- Open telemetry files
+    ------------------------------------------------------
+
+    local score_log = io.open(score_path, "w")
+
+    if not score_log then
         print("ERROR: Could not create score log")
         return
     end
 
-    logfile:write("score\n")
-    logfile:flush()
+    local events_log = io.open(events_path, "w")
+
+    if not events_log then
+        print("ERROR: Could not create events log")
+        score_log:close()
+        return
+    end
+
+    score_log:write("elapsed_seconds,score\n")
+    score_log:flush()
+
+    events_log:write(
+        "elapsed_seconds,event,score,details\n"
+    )
+    events_log:flush()
 
     ------------------------------------------------------
     -- Runtime state
     ------------------------------------------------------
+
+    local plugin_start_clock = os.clock()
+    local game_start_clock = nil
 
     local last_score = -1
     local last_valid_score = 0
@@ -101,10 +142,51 @@ function dktracker.startplugin()
     local level_transition_count = 0
 
     ------------------------------------------------------
-    -- Event output
+    -- Timing
     ------------------------------------------------------
 
-    local function print_life_lost()
+    local function elapsed_seconds()
+        local start_clock =
+            game_start_clock or plugin_start_clock
+
+        return os.clock() - start_clock
+    end
+
+    ------------------------------------------------------
+    -- CSV output
+    ------------------------------------------------------
+
+    local function write_score(score)
+        score_log:write(
+            string.format(
+                "%.3f,%d\n",
+                elapsed_seconds(),
+                score
+            )
+        )
+
+        score_log:flush()
+    end
+
+    local function write_event(event_name, score, details)
+        events_log:write(
+            string.format(
+                "%.3f,%s,%d,%s\n",
+                elapsed_seconds(),
+                event_name,
+                score,
+                details or ""
+            )
+        )
+
+        events_log:flush()
+    end
+
+    ------------------------------------------------------
+    -- Semantic events
+    ------------------------------------------------------
+
+    local function record_life_lost()
         life_lost_count = life_lost_count + 1
 
         print("=================================")
@@ -121,10 +203,20 @@ function dktracker.startplugin()
             )
         )
         print("=================================")
+
+        write_event(
+            "life_lost",
+            last_valid_score,
+            string.format(
+                "life_lost_number=%d",
+                life_lost_count
+            )
+        )
     end
 
-    local function print_level_transition()
-        level_transition_count = level_transition_count + 1
+    local function record_level_transition()
+        level_transition_count =
+            level_transition_count + 1
 
         print("=================================")
         print(
@@ -140,6 +232,15 @@ function dktracker.startplugin()
             )
         )
         print("=================================")
+
+        write_event(
+            "level_transition",
+            last_valid_score,
+            string.format(
+                "level_transition_number=%d",
+                level_transition_count
+            )
+        )
     end
 
     ------------------------------------------------------
@@ -185,6 +286,8 @@ function dktracker.startplugin()
             if saw_nonzero_score and score == 0 then
 
                 game_started = true
+                game_start_clock = os.clock()
+
                 last_score = 0
                 last_valid_score = 0
 
@@ -194,15 +297,15 @@ function dktracker.startplugin()
 
                 print("Game started!")
 
-                logfile:write("0\n")
-                logfile:flush()
+                write_score(0)
+                write_event("game_start", 0, "")
             end
 
             return
         end
 
         --------------------------------------------------
-        -- Preserve the most recent real score
+        -- Preserve most recent meaningful score
         --------------------------------------------------
 
         if score > 0 then
@@ -210,21 +313,23 @@ function dktracker.startplugin()
         end
 
         --------------------------------------------------
-        -- Track score changes
+        -- Track meaningful score changes
+        --
+        -- Ignore temporary zero values caused by board
+        -- teardown and respawning.
         --------------------------------------------------
 
-        if score ~= last_score then
+        if score > 0 and score ~= last_score then
 
             print(string.format("Score: %d", score))
 
-            logfile:write(string.format("%d\n", score))
-            logfile:flush()
+            write_score(score)
 
             last_score = score
         end
 
         --------------------------------------------------
-        -- Arm event detection while a board is active
+        -- Arm event detection during active board state
         --------------------------------------------------
 
         if board_active == 0x02 then
@@ -233,10 +338,6 @@ function dktracker.startplugin()
 
         --------------------------------------------------
         -- Detect successful board completion
-        --
-        -- Observed at the end of Level 1-1:
-        --
-        --   608A: 06 -> 07
         --------------------------------------------------
 
         if
@@ -247,20 +348,15 @@ function dktracker.startplugin()
             board_completion_pending = true
 
             if DEBUG_GAME_STATE then
-                print("Board completion state detected: 608A = 07")
+                print(
+                    "Board completion state detected: "
+                    .. "608A = 07"
+                )
             end
         end
 
         --------------------------------------------------
         -- Classify board teardown
-        --
-        -- Observed teardown:
-        --
-        --   6208: 02 -> 00
-        --
-        -- If 608A previously reached 07, classify this as
-        -- a successful level transition. Otherwise, treat
-        -- it as a life lost.
         --------------------------------------------------
 
         if
@@ -272,9 +368,9 @@ function dktracker.startplugin()
             event_detection_armed = false
 
             if board_completion_pending then
-                print_level_transition()
+                record_level_transition()
             else
-                print_life_lost()
+                record_life_lost()
             end
 
             board_completion_pending = false
@@ -318,7 +414,7 @@ function dktracker.startplugin()
         end
 
         --------------------------------------------------
-        -- Save current state for next check
+        -- Save state for next check
         --------------------------------------------------
 
         last_board_state = board_state
@@ -335,12 +431,17 @@ function dktracker.startplugin()
     emu.add_machine_stop_notifier(
         function()
 
-            if logfile then
-                logfile:close()
-                logfile = nil
+            if score_log then
+                score_log:close()
+                score_log = nil
             end
 
-            print("Score log saved.")
+            if events_log then
+                events_log:close()
+                events_log = nil
+            end
+
+            print("Telemetry logs saved.")
             print(
                 string.format(
                     "Lives lost detected: %d",
