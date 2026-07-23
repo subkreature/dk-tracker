@@ -5,11 +5,17 @@
 __pycache__/
 *.pyc
 
-# Generated session data
+# Runtime telemetry
+data/sessions/
 data/sessions.csv
+data/sessions_legacy.csv
 
 # MAME generated files
 nvram/
 cfg/
 snap/
 sta/
+
+# MAME handoff files
+score_path.txt
+events_path.txt
