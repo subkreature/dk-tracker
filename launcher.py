@@ -59,7 +59,9 @@ def get_folder_size(folder: Path) -> int:
     return total_size
 
 
-def read_csv_rows(csv_file: Path) -> list[dict[str, str]]:
+def read_csv_rows(
+    csv_file: Path,
+) -> list[dict[str, str]]:
     """Read a CSV file into a list of dictionaries."""
 
     if not csv_file.exists():
@@ -76,8 +78,10 @@ def read_csv_rows(csv_file: Path) -> list[dict[str, str]]:
         return []
 
 
-def get_final_score(score_rows: list[dict[str, str]]) -> int:
-    """Return the highest valid score recorded in the session."""
+def get_final_score(
+    score_rows: list[dict[str, str]],
+) -> int:
+    """Return the highest valid score in the session."""
 
     scores: list[int] = []
 
@@ -94,7 +98,7 @@ def count_events(
     event_rows: list[dict[str, str]],
     event_name: str,
 ) -> int:
-    """Count semantic events matching the requested name."""
+    """Count events matching the requested name."""
 
     return sum(
         1
@@ -103,8 +107,22 @@ def count_events(
     )
 
 
-def parse_positive_int(value: str | None) -> int | None:
-    """Convert a CSV value to a positive integer when possible."""
+def has_event(
+    event_rows: list[dict[str, str]],
+    event_name: str,
+) -> bool:
+    """Return whether an event occurred at least once."""
+
+    return any(
+        row.get("event") == event_name
+        for row in event_rows
+    )
+
+
+def parse_positive_int(
+    value: str | None,
+) -> int | None:
+    """Convert a CSV value to a positive integer."""
 
     if value is None:
         return None
@@ -120,71 +138,61 @@ def parse_positive_int(value: str | None) -> int | None:
     return number
 
 
-def get_board_name(
+def get_board_label(
     level: int,
-    screen: int,
+    board_position: int,
     screen_name: str,
 ) -> str:
-    """Return a readable Donkey Kong board label."""
+    """Return a player-facing board label."""
 
-    cleaned_name = screen_name.strip().replace("_", " ")
+    cleaned_name = (
+        screen_name.strip().replace("_", " ")
+    )
 
     if cleaned_name and cleaned_name != "unknown":
-        return f"{level}-{screen} ({cleaned_name})"
+        return (
+            f"{level}-{board_position} "
+            f"({cleaned_name})"
+        )
 
-    return f"{level}-{screen}"
-
-
-def get_board_progression_value(level: int, screen: int) -> int:
-    """
-    Return a sortable progression value.
-
-    Donkey Kong's screen byte identifies the board type:
-        1 = barrels
-        2 = pie factory
-        3 = elevators
-        4 = rivets
-
-    Within the same level, the numeric screen value provides a useful
-    progression order for the currently supported telemetry.
-    """
-
-    return level * 10 + screen
+    return f"{level}-{board_position}"
 
 
 def get_board_summary(
     event_rows: list[dict[str, str]],
 ) -> tuple[str, str, str]:
-    """
-    Return starting board, ending board, and furthest board reached.
+    """Return starting, ending, and furthest board reached."""
 
-    Board-start events are preferred because they represent boards that
-    actually became active.
-    """
-
-    boards: list[dict[str, int | str]] = []
+    boards: list[dict[str, object]] = []
 
     for row in event_rows:
         if row.get("event") != "board_start":
             continue
 
-        level = parse_positive_int(row.get("level"))
-        screen = parse_positive_int(row.get("screen"))
+        level = parse_positive_int(
+            row.get("level")
+        )
 
-        if level is None or screen is None:
+        board_position = parse_positive_int(
+            row.get("board_position")
+        )
+
+        if level is None or board_position is None:
             continue
 
-        name = row.get("screen_name", "unknown")
+        name = row.get(
+            "screen_name",
+            "unknown",
+        )
 
         boards.append(
             {
                 "level": level,
-                "screen": screen,
-                "screen_name": name,
-                "label": get_board_name(level, screen, name),
-                "progress": get_board_progression_value(
+                "board_position": board_position,
+                "label": get_board_label(
                     level,
-                    screen,
+                    board_position,
+                    name,
                 ),
             }
         )
@@ -197,12 +205,19 @@ def get_board_summary(
 
     furthest = max(
         boards,
-        key=lambda board: int(board["progress"]),
+        key=lambda board: (
+            int(board["level"]),
+            int(board["board_position"]),
+        ),
     )
 
     furthest_board = str(furthest["label"])
 
-    return starting_board, ending_board, furthest_board
+    return (
+        starting_board,
+        ending_board,
+        furthest_board,
+    )
 
 
 # ---------------------------------------------------------
@@ -216,11 +231,19 @@ print()
 
 if not MAME_EXECUTABLE.exists():
     raise FileNotFoundError(
-        f"MAME executable was not found at:\n{MAME_EXECUTABLE}"
+        f"MAME executable was not found at:\n"
+        f"{MAME_EXECUTABLE}"
     )
 
-DATA_FOLDER.mkdir(parents=True, exist_ok=True)
-SESSIONS_FOLDER.mkdir(parents=True, exist_ok=True)
+DATA_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True,
+)
+
+SESSIONS_FOLDER.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
 existing_sessions = [
     path
@@ -228,31 +251,55 @@ existing_sessions = [
     if path.is_dir()
 ]
 
-existing_storage = get_folder_size(SESSIONS_FOLDER)
+existing_storage = get_folder_size(
+    SESSIONS_FOLDER
+)
 
 print("Tracker storage:")
-print(f"  Existing sessions: {len(existing_sessions)}")
-print(f"  Disk usage: {format_bytes(existing_storage)}")
+print(
+    f"  Existing sessions: "
+    f"{len(existing_sessions)}"
+)
+print(
+    f"  Disk usage: "
+    f"{format_bytes(existing_storage)}"
+)
 print()
 
 start_time = datetime.now()
 
-session_name = start_time.strftime("%Y-%m-%d_%H-%M-%S")
-session_folder = SESSIONS_FOLDER / session_name
-session_folder.mkdir(parents=True, exist_ok=False)
+session_name = start_time.strftime(
+    "%Y-%m-%d_%H-%M-%S"
+)
 
-score_file = session_folder / "score_log.csv"
-event_file = session_folder / "events.csv"
+session_folder = (
+    SESSIONS_FOLDER / session_name
+)
+
+session_folder.mkdir(
+    parents=True,
+    exist_ok=False,
+)
+
+score_file = (
+    session_folder / "score_log.csv"
+)
+
+event_file = (
+    session_folder / "events.csv"
+)
 
 print(f"Session started: {start_time}")
 print(f"Session folder: {session_folder}")
 print()
 
-# MAME's Lua plugin reads these path files to discover where
-# the current session telemetry should be written.
+score_path_file = (
+    MAME_FOLDER / "score_path.txt"
+)
 
-score_path_file = MAME_FOLDER / "score_path.txt"
-events_path_file = MAME_FOLDER / "events_path.txt"
+events_path_file = (
+    MAME_FOLDER / "events_path.txt"
+)
 
 score_path_file.write_text(
     str(score_file.resolve()),
@@ -299,7 +346,7 @@ lives_lost = count_events(
     "life_lost",
 )
 
-levels_cleared = count_events(
+boards_cleared = count_events(
     event_rows,
     "level_transition",
 )
@@ -309,11 +356,20 @@ bonus_lives = count_events(
     "bonus_life",
 )
 
-starting_board, ending_board, furthest_board = (
-    get_board_summary(event_rows)
+game_over = has_event(
+    event_rows,
+    "game_over",
 )
 
-session_size = get_folder_size(session_folder)
+(
+    starting_board,
+    ending_board,
+    furthest_board,
+) = get_board_summary(event_rows)
+
+session_size = get_folder_size(
+    session_folder
+)
 
 print()
 print("Game finished!")
@@ -327,11 +383,15 @@ print("===================================")
 print(f"Final score: {final_score}")
 print(f"Lives lost: {lives_lost}")
 print(f"Bonus lives: {bonus_lives}")
-print(f"Boards cleared: {levels_cleared}")
+print(f"Boards cleared: {boards_cleared}")
+print(f"Game over: {'Yes' if game_over else 'No'}")
 print(f"Starting board: {starting_board}")
 print(f"Ending board: {ending_board}")
 print(f"Furthest board: {furthest_board}")
-print(f"Session storage: {format_bytes(session_size)}")
+print(
+    f"Session storage: "
+    f"{format_bytes(session_size)}"
+)
 print(f"MAME exit code: {return_code}")
 print()
 print("Files written:")
@@ -342,9 +402,16 @@ print("===================================")
 
 # ---------------------------------------------------------
 # Append persistent session history
+#
+# Keep the existing sessions.csv layout unchanged for now.
+# Game-over status remains available in events.csv and can
+# be added during the later database/dashboard migration.
 # ---------------------------------------------------------
 
-history_exists = SESSION_HISTORY_FILE.exists()
+history_exists = (
+    SESSION_HISTORY_FILE.exists()
+)
+
 history_is_empty = (
     not history_exists
     or SESSION_HISTORY_FILE.stat().st_size == 0
@@ -386,7 +453,7 @@ with SESSION_HISTORY_FILE.open(
             final_score,
             lives_lost,
             bonus_lives,
-            levels_cleared,
+            boards_cleared,
             starting_board,
             ending_board,
             furthest_board,
@@ -404,9 +471,17 @@ total_sessions = len(
     ]
 )
 
-total_storage = get_folder_size(SESSIONS_FOLDER)
+total_storage = get_folder_size(
+    SESSIONS_FOLDER
+)
 
 print()
 print("Session saved.")
-print(f"Total tracked sessions: {total_sessions}")
-print(f"Total tracker storage: {format_bytes(total_storage)}")
+print(
+    f"Total tracked sessions: "
+    f"{total_sessions}"
+)
+print(
+    f"Total tracker storage: "
+    f"{format_bytes(total_storage)}"
+)

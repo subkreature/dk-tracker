@@ -1,6 +1,6 @@
 local exports = {
     name = "dktracker",
-    version = "0.1.4",
+    version = "0.1.7",
     description = "Donkey Kong Tracker",
     license = "MIT",
     author = { name = "Nick" }
@@ -26,7 +26,7 @@ local ADDRESS_BOARD_STATE = 0x608A
 local ADDRESS_BOARD_ACTIVE = 0x6208
 local ADDRESS_AUX_STATE = 0x694E
 
-local ADDRESS_SCREEN_NUMBER = 0x6227
+local ADDRESS_SCREEN_TYPE = 0x6227
 local ADDRESS_LIVES_REMAINING = 0x6228
 local ADDRESS_LEVEL_NUMBER = 0x6229
 
@@ -42,12 +42,15 @@ local function bcd_to_decimal(value)
 end
 
 local function read_score(space)
-    local low_byte = space:read_u8(ADDRESS_SCORE_LOW)
-    local high_byte = space:read_u8(ADDRESS_SCORE_HIGH)
+    local low_byte =
+        space:read_u8(ADDRESS_SCORE_LOW)
+
+    local high_byte =
+        space:read_u8(ADDRESS_SCORE_HIGH)
 
     return
-        bcd_to_decimal(high_byte) * 10000 +
-        bcd_to_decimal(low_byte) * 100
+        bcd_to_decimal(high_byte) * 10000
+        + bcd_to_decimal(low_byte) * 100
 end
 
 local function read_path_file(filename)
@@ -69,7 +72,7 @@ local function read_path_file(filename)
     return path
 end
 
-local function screen_name(screen_number)
+local function screen_name(screen_type)
     local names = {
         [1] = "barrels",
         [2] = "pie_factory",
@@ -77,11 +80,11 @@ local function screen_name(screen_number)
         [4] = "rivets"
     }
 
-    return names[screen_number] or "unknown"
+    return names[screen_type] or "unknown"
 end
 
-local function is_valid_screen(screen_number)
-    return screen_number >= 1 and screen_number <= 4
+local function is_valid_screen(screen_type)
+    return screen_type >= 1 and screen_type <= 4
 end
 
 ----------------------------------------------------------
@@ -100,13 +103,15 @@ function dktracker.startplugin()
     -- Resolve output paths
     ------------------------------------------------------
 
-    local score_path = read_path_file("score_path.txt")
+    local score_path =
+        read_path_file("score_path.txt")
 
     if not score_path then
         return
     end
 
-    local events_path = read_path_file("events_path.txt")
+    local events_path =
+        read_path_file("events_path.txt")
 
     if not events_path then
         return
@@ -131,12 +136,15 @@ function dktracker.startplugin()
         return
     end
 
-    score_log:write("elapsed_seconds,score\n")
+    score_log:write(
+        "elapsed_seconds,score\n"
+    )
     score_log:flush()
 
     events_log:write(
-        "elapsed_seconds,event,score,level,screen,"
-        .. "screen_name,lives,details\n"
+        "elapsed_seconds,event,score,level,"
+        .. "board_position,screen_type,screen_name,"
+        .. "lives,details\n"
     )
     events_log:flush()
 
@@ -157,26 +165,36 @@ function dktracker.startplugin()
     local last_aux_state = nil
     local last_lives_byte = nil
 
-    -- Identity of the board currently being played.
     local active_level = 0
-    local active_screen = 0
+    local active_board_position = 0
+    local active_screen_type = 0
 
-    local last_reported_level = nil
-    local last_reported_screen = nil
+    -- Prevents startup animation/state changes from being
+    -- interpreted as a real board clear.
+    local first_board_activated = false
+
+    -- Set only after a successful board clear.
+    local board_advance_pending = false
 
     local current_lives = 0
     local lives_monitor_initialized = false
 
-    -- A lives decrease occurs before the board teardown
-    -- associated with a death.
     local life_loss_pending = false
     local life_loss_previous_lives = nil
     local life_loss_new_lives = nil
 
+    local bonus_life_pending = false
+    local bonus_previous_lives = nil
+    local bonus_new_lives = nil
+    local bonus_detected_elapsed = nil
+
     local event_detection_armed = false
 
+    local final_death_recorded = false
+    local game_over_recorded = false
+
     local life_lost_count = 0
-    local level_transition_count = 0
+    local board_clear_count = 0
     local bonus_life_count = 0
 
     local frame_subscription = nil
@@ -195,7 +213,9 @@ function dktracker.startplugin()
             return 0
         end
 
-        return current_emulated_time() - game_start_time
+        return
+            current_emulated_time()
+            - game_start_time
     end
 
     ------------------------------------------------------
@@ -218,18 +238,20 @@ function dktracker.startplugin()
         event_name,
         score,
         level,
-        screen,
+        board_position,
+        screen_type,
         details
     )
         events_log:write(
             string.format(
-                "%.3f,%s,%d,%d,%d,%s,%d,%s\n",
+                "%.3f,%s,%d,%d,%d,%d,%s,%d,%s\n",
                 elapsed_seconds(),
                 event_name,
                 score,
                 level,
-                screen,
-                screen_name(screen),
+                board_position,
+                screen_type,
+                screen_name(screen_type),
                 current_lives,
                 details or ""
             )
@@ -246,10 +268,16 @@ function dktracker.startplugin()
         print("---------------------------------")
         print(
             string.format(
-                "BOARD ACTIVE: Level %d, Screen %d (%s)",
+                "BOARD ACTIVE: %d-%d (%s)",
                 active_level,
-                active_screen,
-                screen_name(active_screen)
+                active_board_position,
+                screen_name(active_screen_type)
+            )
+        )
+        print(
+            string.format(
+                "Screen type: %d",
+                active_screen_type
             )
         )
         print(
@@ -264,13 +292,15 @@ function dktracker.startplugin()
             "board_start",
             last_valid_score,
             active_level,
-            active_screen,
+            active_board_position,
+            active_screen_type,
             ""
         )
     end
 
     local function record_life_lost()
-        life_lost_count = life_lost_count + 1
+        life_lost_count =
+            life_lost_count + 1
 
         print("=================================")
         print(
@@ -281,10 +311,10 @@ function dktracker.startplugin()
         )
         print(
             string.format(
-                "Board: Level %d, Screen %d (%s)",
+                "Board: %d-%d (%s)",
                 active_level,
-                active_screen,
-                screen_name(active_screen)
+                active_board_position,
+                screen_name(active_screen_type)
             )
         )
         print(
@@ -305,34 +335,80 @@ function dktracker.startplugin()
             "life_lost",
             last_valid_score,
             active_level,
-            active_screen,
+            active_board_position,
+            active_screen_type,
             string.format(
-                "life_lost_number=%d;previous_lives=%d;"
+                "life_lost_number=%d;"
+                .. "previous_lives=%d;"
                 .. "current_lives=%d",
                 life_lost_count,
-                life_loss_previous_lives or current_lives + 1,
-                life_loss_new_lives or current_lives
+                life_loss_previous_lives
+                    or current_lives + 1,
+                life_loss_new_lives
+                    or current_lives
             )
         )
     end
 
-    local function record_level_transition()
-        level_transition_count =
-            level_transition_count + 1
+    local function record_game_over()
+        if game_over_recorded then
+            return
+        end
+
+        game_over_recorded = true
 
         print("=================================")
+        print("GAME OVER")
         print(
             string.format(
-                "LEVEL TRANSITION #%d",
-                level_transition_count
+                "Final board: %d-%d (%s)",
+                active_level,
+                active_board_position,
+                screen_name(active_screen_type)
             )
         )
         print(
             string.format(
-                "Completed: Level %d, Screen %d (%s)",
+                "Final score: %d",
+                last_valid_score
+            )
+        )
+        print("=================================")
+
+        write_event(
+            "game_over",
+            last_valid_score,
+            active_level,
+            active_board_position,
+            active_screen_type,
+            string.format(
+                "lives_lost=%d;"
+                .. "boards_cleared=%d;"
+                .. "bonus_lives=%d",
+                life_lost_count,
+                board_clear_count,
+                bonus_life_count
+            )
+        )
+    end
+
+    local function record_board_clear()
+        board_clear_count =
+            board_clear_count + 1
+
+        print("=================================")
+        print(
+            string.format(
+                "BOARD CLEARED #%d",
+                board_clear_count
+            )
+        )
+        print(
+            string.format(
+                "Completed: %d-%d (%s)",
                 active_level,
-                active_screen,
-                screen_name(active_screen)
+                active_board_position,
+                screen_name(active_screen_type)
             )
         )
         print(
@@ -347,19 +423,22 @@ function dktracker.startplugin()
             "level_transition",
             last_valid_score,
             active_level,
-            active_screen,
+            active_board_position,
+            active_screen_type,
             string.format(
-                "level_transition_number=%d",
-                level_transition_count
+                "board_clear_number=%d",
+                board_clear_count
             )
         )
     end
 
-    local function record_bonus_life(
-        previous_lives,
-        new_lives
-    )
-        bonus_life_count = bonus_life_count + 1
+    local function finalize_bonus_life(score)
+        if not bonus_life_pending then
+            return
+        end
+
+        bonus_life_count =
+            bonus_life_count + 1
 
         print("=================================")
         print(
@@ -370,32 +449,50 @@ function dktracker.startplugin()
         )
         print(
             string.format(
+                "Board: %d-%d (%s)",
+                active_level,
+                active_board_position,
+                screen_name(active_screen_type)
+            )
+        )
+        print(
+            string.format(
                 "Lives remaining: %d -> %d",
-                previous_lives,
-                new_lives
+                bonus_previous_lives,
+                bonus_new_lives
             )
         )
         print(
             string.format(
                 "Score: %d",
-                last_valid_score
+                score
             )
         )
         print("=================================")
 
         write_event(
             "bonus_life",
-            last_valid_score,
+            score,
             active_level,
-            active_screen,
+            active_board_position,
+            active_screen_type,
             string.format(
-                "bonus_life_number=%d;previous_lives=%d;"
-                .. "current_lives=%d",
+                "bonus_life_number=%d;"
+                .. "previous_lives=%d;"
+                .. "current_lives=%d;"
+                .. "detected_elapsed=%.3f",
                 bonus_life_count,
-                previous_lives,
-                new_lives
+                bonus_previous_lives,
+                bonus_new_lives,
+                bonus_detected_elapsed
+                    or elapsed_seconds()
             )
         )
+
+        bonus_life_pending = false
+        bonus_previous_lives = nil
+        bonus_new_lives = nil
+        bonus_detected_elapsed = nil
     end
 
     local function record_lives_change(
@@ -416,7 +513,8 @@ function dktracker.startplugin()
             "lives_changed",
             last_valid_score,
             active_level,
-            active_screen,
+            active_board_position,
+            active_screen_type,
             string.format(
                 "previous=%d;current=%d",
                 previous_lives,
@@ -426,43 +524,94 @@ function dktracker.startplugin()
     end
 
     ------------------------------------------------------
+    -- Board-position handling
+    ------------------------------------------------------
+
+    local function activate_board(
+        raw_level,
+        raw_screen_type
+    )
+        if not first_board_activated then
+            -- First legitimate board activation.
+            active_level = raw_level
+            active_board_position = 1
+            first_board_activated = true
+
+        elseif board_advance_pending then
+            -- A successful clear preceded this activation.
+            if raw_level ~= active_level then
+                active_level = raw_level
+                active_board_position = 1
+            else
+                active_board_position =
+                    active_board_position + 1
+            end
+
+            board_advance_pending = false
+
+        else
+            -- Death respawn. Keep the existing position.
+            active_level = raw_level
+        end
+
+        active_screen_type = raw_screen_type
+
+        record_board_start()
+    end
+
+    ------------------------------------------------------
     -- Per-frame game-state reader
     ------------------------------------------------------
 
     local function read_game_state()
 
         local machine = manager.machine
-        local cpu = machine.devices[":maincpu"]
+        local cpu =
+            machine.devices[":maincpu"]
 
         if not cpu then
             return
         end
 
-        local space = cpu.spaces["program"]
+        local space =
+            cpu.spaces["program"]
 
         if not space then
             return
         end
 
-        local score = read_score(space)
+        local score =
+            read_score(space)
 
         local board_state =
-            space:read_u8(ADDRESS_BOARD_STATE)
+            space:read_u8(
+                ADDRESS_BOARD_STATE
+            )
 
         local board_active =
-            space:read_u8(ADDRESS_BOARD_ACTIVE)
+            space:read_u8(
+                ADDRESS_BOARD_ACTIVE
+            )
 
         local aux_state =
-            space:read_u8(ADDRESS_AUX_STATE)
+            space:read_u8(
+                ADDRESS_AUX_STATE
+            )
 
-        local raw_screen =
-            space:read_u8(ADDRESS_SCREEN_NUMBER)
+        local raw_screen_type =
+            space:read_u8(
+                ADDRESS_SCREEN_TYPE
+            )
 
         local raw_level =
-            space:read_u8(ADDRESS_LEVEL_NUMBER)
+            space:read_u8(
+                ADDRESS_LEVEL_NUMBER
+            )
 
         local lives_remaining =
-            space:read_u8(ADDRESS_LIVES_REMAINING)
+            space:read_u8(
+                ADDRESS_LIVES_REMAINING
+            )
 
         --------------------------------------------------
         -- Detect real game start
@@ -477,16 +626,28 @@ function dktracker.startplugin()
             if saw_nonzero_score and score == 0 then
 
                 game_started = true
-                game_start_time = current_emulated_time()
+                game_start_time =
+                    current_emulated_time()
 
                 last_score = 0
                 last_valid_score = 0
 
-                last_board_state = board_state
-                last_board_active = board_active
-                last_aux_state = aux_state
+                last_board_state =
+                    board_state
 
-                current_lives = lives_remaining
+                last_board_active =
+                    board_active
+
+                last_aux_state =
+                    aux_state
+
+                current_lives =
+                    lives_remaining
+
+                -- Startup board-state transitions must not
+                -- be classified until a real board activates.
+                event_detection_armed = false
+                board_advance_pending = false
 
                 print("Game started!")
                 print(
@@ -497,9 +658,9 @@ function dktracker.startplugin()
                 )
                 print(
                     string.format(
-                        "Initial screen byte: %d (%s)",
-                        raw_screen,
-                        screen_name(raw_screen)
+                        "Initial screen type: %d (%s)",
+                        raw_screen_type,
+                        screen_name(raw_screen_type)
                     )
                 )
                 print(
@@ -515,7 +676,8 @@ function dktracker.startplugin()
                     "game_start",
                     0,
                     raw_level,
-                    raw_screen,
+                    1,
+                    raw_screen_type,
                     ""
                 )
             end
@@ -526,6 +688,14 @@ function dktracker.startplugin()
         current_lives = lives_remaining
 
         --------------------------------------------------
+        -- Preserve newest meaningful score
+        --------------------------------------------------
+
+        if score > 0 then
+            last_valid_score = score
+        end
+
+        --------------------------------------------------
         -- Detect a board becoming active
         --------------------------------------------------
 
@@ -533,29 +703,24 @@ function dktracker.startplugin()
             last_board_active ~= 0x02
             and board_active == 0x02
             and raw_level > 0
-            and is_valid_screen(raw_screen)
+            and is_valid_screen(raw_screen_type)
         then
-            active_level = raw_level
-            active_screen = raw_screen
-
             if not lives_monitor_initialized then
-                last_lives_byte = lives_remaining
-                lives_monitor_initialized = true
+                last_lives_byte =
+                    lives_remaining
+
+                lives_monitor_initialized =
+                    true
             end
 
-            if
-                last_reported_level ~= active_level
-                or last_reported_screen ~= active_screen
-            then
-                last_reported_level = active_level
-                last_reported_screen = active_screen
-
-                record_board_start()
-            end
+            activate_board(
+                raw_level,
+                raw_screen_type
+            )
         end
 
         --------------------------------------------------
-        -- Track actual lives changes
+        -- Track lives changes
         --------------------------------------------------
 
         if
@@ -569,65 +734,93 @@ function dktracker.startplugin()
             )
 
             if lives_remaining < last_lives_byte then
-                life_loss_pending = true
-                life_loss_previous_lives = last_lives_byte
-                life_loss_new_lives = lives_remaining
-            elseif lives_remaining > last_lives_byte then
-                record_bonus_life(
-                    last_lives_byte,
+                life_loss_previous_lives =
+                    last_lives_byte
+
+                life_loss_new_lives =
                     lives_remaining
-                )
+
+                if lives_remaining == 0 then
+                    record_life_lost()
+                    record_game_over()
+
+                    final_death_recorded = true
+                    life_loss_pending = false
+
+                    life_loss_previous_lives = nil
+                    life_loss_new_lives = nil
+                else
+                    life_loss_pending = true
+                end
+
+            elseif lives_remaining > last_lives_byte then
+                bonus_life_pending = true
+
+                bonus_previous_lives =
+                    last_lives_byte
+
+                bonus_new_lives =
+                    lives_remaining
+
+                bonus_detected_elapsed =
+                    elapsed_seconds()
             end
         end
 
         --------------------------------------------------
-        -- Preserve most recent meaningful score
-        --------------------------------------------------
-
-        if score > 0 then
-            last_valid_score = score
-        end
-
-        --------------------------------------------------
-        -- Track every observed score change
+        -- Record score changes
         --------------------------------------------------
 
         if score > 0 and score ~= last_score then
 
-            print(string.format("Score: %d", score))
+            print(
+                string.format(
+                    "Score: %d",
+                    score
+                )
+            )
 
             write_score(score)
 
             last_score = score
+
+            finalize_bonus_life(score)
         end
 
         --------------------------------------------------
-        -- Arm teardown detection during active play
+        -- Arm teardown detection only after the first
+        -- legitimate board activation.
         --------------------------------------------------
 
-        if board_active == 0x02 then
+        if
+            first_board_activated
+            and board_active == 0x02
+        then
             event_detection_armed = true
         end
 
         --------------------------------------------------
         -- Classify board teardown
-        --
-        -- A life decrease reliably precedes death teardown.
-        -- Teardown without a life decrease is a successful
-        -- board completion.
         --------------------------------------------------
 
         if
-            event_detection_armed
+            first_board_activated
+            and event_detection_armed
             and last_board_active == 0x02
             and board_active == 0x00
         then
             event_detection_armed = false
 
-            if life_loss_pending then
+            if final_death_recorded then
+                -- Already recorded on lives reaching zero.
+                final_death_recorded = false
+
+            elseif life_loss_pending then
                 record_life_lost()
+
             else
-                record_level_transition()
+                record_board_clear()
+                board_advance_pending = true
             end
 
             life_loss_pending = false
@@ -690,11 +883,19 @@ function dktracker.startplugin()
     ------------------------------------------------------
 
     frame_subscription =
-        emu.add_machine_frame_notifier(read_game_state)
+        emu.add_machine_frame_notifier(
+            read_game_state
+        )
 
     stop_subscription =
         emu.add_machine_stop_notifier(
             function()
+
+                if bonus_life_pending then
+                    finalize_bonus_life(
+                        last_valid_score
+                    )
+                end
 
                 if frame_subscription then
                     frame_subscription:unsubscribe()
@@ -720,14 +921,22 @@ function dktracker.startplugin()
                 )
                 print(
                     string.format(
-                        "Level transitions detected: %d",
-                        level_transition_count
+                        "Boards cleared detected: %d",
+                        board_clear_count
                     )
                 )
                 print(
                     string.format(
                         "Bonus lives detected: %d",
                         bonus_life_count
+                    )
+                )
+                print(
+                    string.format(
+                        "Game over detected: %s",
+                        game_over_recorded
+                            and "yes"
+                            or "no"
                     )
                 )
 
