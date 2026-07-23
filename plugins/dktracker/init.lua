@@ -1,6 +1,6 @@
 local exports = {
     name = "dktracker",
-    version = "0.1.0",
+    version = "0.1.1",
     description = "Donkey Kong Tracker",
     license = "MIT",
     author = { name = "Nick" }
@@ -73,6 +73,7 @@ function dktracker.startplugin()
     print("=================================")
     print("DK Tracker loaded from DK-Tracker project!")
     print("Version: " .. exports.version)
+    print("Telemetry sampling: every emulated frame")
     print("=================================")
 
     ------------------------------------------------------
@@ -122,8 +123,7 @@ function dktracker.startplugin()
     -- Runtime state
     ------------------------------------------------------
 
-    local plugin_start_clock = os.clock()
-    local game_start_clock = nil
+    local game_start_time = nil
 
     local last_score = -1
     local last_valid_score = 0
@@ -141,15 +141,23 @@ function dktracker.startplugin()
     local life_lost_count = 0
     local level_transition_count = 0
 
+    local frame_subscription = nil
+    local stop_subscription = nil
+
     ------------------------------------------------------
     -- Timing
     ------------------------------------------------------
 
-    local function elapsed_seconds()
-        local start_clock =
-            game_start_clock or plugin_start_clock
+    local function current_emulated_time()
+        return manager.machine.time:as_double()
+    end
 
-        return os.clock() - start_clock
+    local function elapsed_seconds()
+        if not game_start_time then
+            return 0
+        end
+
+        return current_emulated_time() - game_start_time
     end
 
     ------------------------------------------------------
@@ -244,7 +252,7 @@ function dktracker.startplugin()
     end
 
     ------------------------------------------------------
-    -- Periodic game-state reader
+    -- Per-frame game-state reader
     ------------------------------------------------------
 
     local function read_game_state()
@@ -286,7 +294,7 @@ function dktracker.startplugin()
             if saw_nonzero_score and score == 0 then
 
                 game_started = true
-                game_start_clock = os.clock()
+                game_start_time = current_emulated_time()
 
                 last_score = 0
                 last_valid_score = 0
@@ -313,10 +321,11 @@ function dktracker.startplugin()
         end
 
         --------------------------------------------------
-        -- Track meaningful score changes
+        -- Track every observed score change
         --
-        -- Ignore temporary zero values caused by board
-        -- teardown and respawning.
+        -- Running this once per emulated frame should
+        -- preserve rapid, consecutive scoring events that
+        -- one-second polling could skip.
         --------------------------------------------------
 
         if score > 0 and score ~= last_score then
@@ -414,7 +423,7 @@ function dktracker.startplugin()
         end
 
         --------------------------------------------------
-        -- Save state for next check
+        -- Save state for the next frame
         --------------------------------------------------
 
         last_board_state = board_state
@@ -426,36 +435,45 @@ function dktracker.startplugin()
     -- Register callbacks
     ------------------------------------------------------
 
-    emu.register_periodic(read_game_state, 1)
+    frame_subscription =
+        emu.add_machine_frame_notifier(read_game_state)
 
-    emu.add_machine_stop_notifier(
-        function()
+    stop_subscription =
+        emu.add_machine_stop_notifier(
+            function()
 
-            if score_log then
-                score_log:close()
-                score_log = nil
-            end
+                if frame_subscription then
+                    frame_subscription:unsubscribe()
+                    frame_subscription = nil
+                end
 
-            if events_log then
-                events_log:close()
-                events_log = nil
-            end
+                if score_log then
+                    score_log:close()
+                    score_log = nil
+                end
 
-            print("Telemetry logs saved.")
-            print(
-                string.format(
-                    "Lives lost detected: %d",
-                    life_lost_count
+                if events_log then
+                    events_log:close()
+                    events_log = nil
+                end
+
+                print("Telemetry logs saved.")
+                print(
+                    string.format(
+                        "Lives lost detected: %d",
+                        life_lost_count
+                    )
                 )
-            )
-            print(
-                string.format(
-                    "Level transitions detected: %d",
-                    level_transition_count
+                print(
+                    string.format(
+                        "Level transitions detected: %d",
+                        level_transition_count
+                    )
                 )
-            )
-        end
-    )
+
+                stop_subscription = nil
+            end
+        )
 
 end
 
