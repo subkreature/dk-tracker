@@ -533,6 +533,28 @@ def count_live_events(
     )
 
 
+def get_lives_remaining(
+    event_rows: list[dict[str, str]],
+) -> int | None:
+    """
+    Return the newest valid remaining-lives value.
+
+    The Lua plugin writes the current lives value into every
+    event row. Reading backward gives us the most recent
+    complete value recorded during the active session.
+    """
+
+    for row in reversed(event_rows):
+        lives = parse_nonnegative_int(
+            row.get("lives")
+        )
+
+        if lives is not None:
+            return lives
+
+    return None
+
+
 def format_board_name(
     level: int,
     board_position: int,
@@ -777,6 +799,10 @@ def get_live_session_state() -> dict[str, object]:
         ),
         "current_board":
             get_current_board(
+                event_rows
+            ),
+         "lives_remaining":
+            get_lives_remaining(
                 event_rows
             ),
         "lives_lost":
@@ -1367,7 +1393,18 @@ def build_dashboard_html() -> str:
                         Waiting for game start
                     </p>
                 </article>
+                <article class="live-card">
+                    <p class="live-label">
+                        Lives Remaining
+                    </p>
 
+                    <p
+                        id="live-lives-remaining"
+                        class="live-value"
+                    >
+                        --
+                    </p>
+                </article>
                 <article class="live-card">
                     <p class="live-label">
                         Lives Lost
@@ -1544,7 +1581,10 @@ def build_dashboard_html() -> str:
             document.getElementById(
                 "live-board"
             );
-
+        const liveLivesRemaining =
+            document.getElementById(
+                "live-lives-remaining"
+            );
         const liveLivesLost =
             document.getElementById(
                 "live-lives-lost"
@@ -1775,7 +1815,17 @@ def build_dashboard_html() -> str:
                 live.current_board
                 || "Waiting for game start"
             );
-
+                       if (
+                live.lives_remaining === null
+                || live.lives_remaining === undefined
+            ) {{
+                liveLivesRemaining.textContent = "--";
+            }} else {{
+                liveLivesRemaining.textContent =
+                    Number(
+                        live.lives_remaining
+                    ).toLocaleString();
+            }}
             liveLivesLost.textContent =
                 Number(
                     live.lives_lost || 0
