@@ -1,4 +1,8 @@
 from __future__ import annotations
+from tracker.live import (
+    count_live_events,
+    get_lives_remaining,
+)
 
 import csv
 from datetime import datetime
@@ -517,20 +521,6 @@ def get_live_score(
         default=0,
     )
 
-
-def count_live_events(
-    event_rows: list[dict[str, str]],
-    event_name: str,
-) -> int:
-    """
-    Count matching telemetry events.
-    """
-
-    return sum(
-        1
-        for row in event_rows
-        if row.get("event") == event_name
-    )
 
 
 def get_lives_remaining(
