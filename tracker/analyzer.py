@@ -3,6 +3,7 @@ from statistics import mean, median
 from tracker.models import (
     BoardPerformance,
     Career,
+    CareerBoardStats,
     CareerSummary,
     GameEvent,
     Session,
@@ -279,6 +280,68 @@ def analyze_session(
     )
 
 
+def analyze_career_board_stats(
+    session_summaries: list[SessionSummary],
+) -> list[CareerBoardStats]:
+    performances_by_board: dict[
+        tuple[int, int],
+        list[BoardPerformance],
+    ] = {}
+
+    for summary in session_summaries:
+        for performance in summary.board_performances:
+            performances_by_board.setdefault(
+                performance.board_key,
+                [],
+            ).append(performance)
+
+    board_stats: list[CareerBoardStats] = []
+
+    for board_key in sorted(
+        performances_by_board
+    ):
+        performances = performances_by_board[
+            board_key
+        ]
+
+        first_performance = performances[0]
+
+        points_gained_values = [
+            performance.points_gained
+            for performance in performances
+        ]
+
+        board_stats.append(
+            CareerBoardStats(
+                level=first_performance.level,
+                board_position=(
+                    first_performance.board_position
+                ),
+                screen_name=(
+                    first_performance.screen_name
+                ),
+                attempts=len(performances),
+                clears=sum(
+                    1
+                    for performance in performances
+                    if performance.cleared
+                ),
+                deaths=sum(
+                    performance.deaths
+                    for performance in performances
+                ),
+                average_points_gained=mean(
+                    points_gained_values
+                ),
+                best_points_gained=max(
+                    points_gained_values
+                ),
+            )
+        )
+
+    return board_stats
+
+
 def analyze_career(
     career: Career,
 ) -> CareerSummary:
@@ -308,6 +371,10 @@ def analyze_career(
         1
         for summary in session_summaries
         if summary.game_over
+    )
+
+    board_stats = analyze_career_board_stats(
+        session_summaries
     )
 
     return CareerSummary(
@@ -341,4 +408,5 @@ def analyze_career(
             if first_death_scores
             else None
         ),
+        board_stats=board_stats,
     )

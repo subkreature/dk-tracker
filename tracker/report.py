@@ -1,6 +1,7 @@
 from tracker.models import (
     BoardPerformance,
     Career,
+    CareerBoardStats,
     CareerSummary,
     Session,
     SessionSummary,
@@ -107,6 +108,43 @@ def print_board_performance(
     print(
         f"  Cleared       : "
         f"{'Yes' if performance.cleared else 'No'}"
+    )
+
+
+def print_career_board_stats(
+    board_stats: CareerBoardStats,
+) -> None:
+    print()
+    print(board_stats.board_label)
+
+    print(
+        f"  Attempts      : "
+        f"{board_stats.attempts}"
+    )
+
+    print(
+        f"  Clears        : "
+        f"{board_stats.clears}"
+    )
+
+    print(
+        f"  Clear rate    : "
+        f"{board_stats.clear_rate:.1f}%"
+    )
+
+    print(
+        f"  Deaths        : "
+        f"{board_stats.deaths}"
+    )
+
+    print(
+        f"  Average gain  : "
+        f"{board_stats.average_points_gained:,.0f}"
+    )
+
+    print(
+        f"  Best gain     : "
+        f"{board_stats.best_points_gained:,}"
     )
 
 
@@ -218,17 +256,17 @@ def print_career_report(
     print()
 
     print(
-        f"Career folder       : "
+        f"Career folder          : "
         f"{career.folder}"
     )
 
     print(
-        f"Session folders found: "
+        f"Session folders found  : "
         f"{total_folders}"
     )
 
     print(
-        f"Compatible sessions : "
+        f"Compatible sessions    : "
         f"{summary.tracked_sessions}"
     )
 
@@ -291,6 +329,20 @@ def print_career_report(
         f"Average first death : "
         f"{format_optional_average(summary.average_first_death_score)}"
     )
+
+    print()
+    print("-----------------------------------")
+    print(" Career Board Statistics")
+    print("-----------------------------------")
+
+    if summary.board_stats:
+        for board_stats in summary.board_stats:
+            print_career_board_stats(
+                board_stats
+            )
+    else:
+        print()
+        print("No board statistics available.")
 
     if career.failed_sessions:
         print()

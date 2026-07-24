@@ -62,6 +62,13 @@ class BoardPerformance:
             f"({self.screen_name})"
         )
 
+    @property
+    def board_key(self) -> tuple[int, int]:
+        return (
+            self.level,
+            self.board_position,
+        )
+
 
 @dataclass(frozen=True)
 class SessionSummary:
@@ -91,6 +98,36 @@ class Career:
 
 
 @dataclass(frozen=True)
+class CareerBoardStats:
+    level: int
+    board_position: int
+    screen_name: str
+    attempts: int
+    clears: int
+    deaths: int
+    average_points_gained: float
+    best_points_gained: int
+
+    @property
+    def board_label(self) -> str:
+        return (
+            f"{self.level}-{self.board_position} "
+            f"({self.screen_name})"
+        )
+
+    @property
+    def clear_rate(self) -> float:
+        if self.attempts == 0:
+            return 0.0
+
+        return (
+            self.clears
+            / self.attempts
+            * 100
+        )
+
+
+@dataclass(frozen=True)
 class CareerSummary:
     tracked_sessions: int
     skipped_sessions: int
@@ -104,3 +141,4 @@ class CareerSummary:
     completed_games: int
     quit_or_incomplete_games: int
     average_first_death_score: float | None
+    board_stats: list[CareerBoardStats]
