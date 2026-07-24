@@ -1,5 +1,9 @@
+#!/usr/bin/env python3
+
+import argparse
 import csv
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +22,25 @@ MAME_EXECUTABLE = MAME_FOLDER / "mame"
 
 ROM_NAME = "dkong"
 PLUGIN_NAME = "dktracker"
+
+
+# ---------------------------------------------------------
+# Models
+# ---------------------------------------------------------
+
+@dataclass(frozen=True)
+class LaunchResult:
+    tracking_enabled: bool
+    return_code: int
+    session_folder: Path | None = None
+    final_score: int | None = None
+    lives_lost: int | None = None
+    bonus_lives: int | None = None
+    boards_cleared: int | None = None
+    game_over: bool | None = None
+    starting_board: str | None = None
+    ending_board: str | None = None
+    furthest_board: str | None = None
 
 
 # ---------------------------------------------------------
@@ -50,11 +73,13 @@ def get_folder_size(folder: Path) -> int:
     total_size = 0
 
     for path in folder.rglob("*"):
-        if path.is_file():
-            try:
-                total_size += path.stat().st_size
-            except OSError:
-                pass
+        if not path.is_file():
+            continue
+
+        try:
+            total_size += path.stat().st_size
+        except OSError:
+            pass
 
     return total_size
 
@@ -74,6 +99,7 @@ def read_csv_rows(
             encoding="utf-8",
         ) as file:
             return list(csv.DictReader(file))
+
     except (OSError, csv.Error):
         return []
 
@@ -220,268 +246,450 @@ def get_board_summary(
     )
 
 
-# ---------------------------------------------------------
-# Startup
-# ---------------------------------------------------------
+def validate_mame() -> None:
+    """Confirm that the configured MAME executable exists."""
 
-print("===================================")
-print("        DK Tracker")
-print("===================================")
-print()
-
-if not MAME_EXECUTABLE.exists():
-    raise FileNotFoundError(
-        f"MAME executable was not found at:\n"
-        f"{MAME_EXECUTABLE}"
-    )
-
-DATA_FOLDER.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-SESSIONS_FOLDER.mkdir(
-    parents=True,
-    exist_ok=True,
-)
-
-existing_sessions = [
-    path
-    for path in SESSIONS_FOLDER.iterdir()
-    if path.is_dir()
-]
-
-existing_storage = get_folder_size(
-    SESSIONS_FOLDER
-)
-
-print("Tracker storage:")
-print(
-    f"  Existing sessions: "
-    f"{len(existing_sessions)}"
-)
-print(
-    f"  Disk usage: "
-    f"{format_bytes(existing_storage)}"
-)
-print()
-
-start_time = datetime.now()
-
-session_name = start_time.strftime(
-    "%Y-%m-%d_%H-%M-%S"
-)
-
-session_folder = (
-    SESSIONS_FOLDER / session_name
-)
-
-session_folder.mkdir(
-    parents=True,
-    exist_ok=False,
-)
-
-score_file = (
-    session_folder / "score_log.csv"
-)
-
-event_file = (
-    session_folder / "events.csv"
-)
-
-print(f"Session started: {start_time}")
-print(f"Session folder: {session_folder}")
-print()
-
-score_path_file = (
-    MAME_FOLDER / "score_path.txt"
-)
-
-events_path_file = (
-    MAME_FOLDER / "events_path.txt"
-)
-
-score_path_file.write_text(
-    str(score_file.resolve()),
-    encoding="utf-8",
-)
-
-events_path_file.write_text(
-    str(event_file.resolve()),
-    encoding="utf-8",
-)
-
-
-# ---------------------------------------------------------
-# Launch MAME
-# ---------------------------------------------------------
-
-return_code = subprocess.run(
-    [
-        "./mame",
-        ROM_NAME,
-        "-plugin",
-        PLUGIN_NAME,
-    ],
-    cwd=MAME_FOLDER,
-    check=False,
-).returncode
-
-
-# ---------------------------------------------------------
-# Build session summary
-# ---------------------------------------------------------
-
-end_time = datetime.now()
-duration = end_time - start_time
-duration_seconds = duration.total_seconds()
-
-score_rows = read_csv_rows(score_file)
-event_rows = read_csv_rows(event_file)
-
-final_score = get_final_score(score_rows)
-
-lives_lost = count_events(
-    event_rows,
-    "life_lost",
-)
-
-boards_cleared = count_events(
-    event_rows,
-    "level_transition",
-)
-
-bonus_lives = count_events(
-    event_rows,
-    "bonus_life",
-)
-
-game_over = has_event(
-    event_rows,
-    "game_over",
-)
-
-(
-    starting_board,
-    ending_board,
-    furthest_board,
-) = get_board_summary(event_rows)
-
-session_size = get_folder_size(
-    session_folder
-)
-
-print()
-print("Game finished!")
-print(f"Ended: {end_time}")
-print(f"Duration: {duration}")
-print()
-
-print("===================================")
-print("        Session Summary")
-print("===================================")
-print(f"Final score: {final_score}")
-print(f"Lives lost: {lives_lost}")
-print(f"Bonus lives: {bonus_lives}")
-print(f"Boards cleared: {boards_cleared}")
-print(f"Game over: {'Yes' if game_over else 'No'}")
-print(f"Starting board: {starting_board}")
-print(f"Ending board: {ending_board}")
-print(f"Furthest board: {furthest_board}")
-print(
-    f"Session storage: "
-    f"{format_bytes(session_size)}"
-)
-print(f"MAME exit code: {return_code}")
-print()
-print("Files written:")
-print(f"  {score_file}")
-print(f"  {event_file}")
-print("===================================")
-
-
-# ---------------------------------------------------------
-# Append persistent session history
-#
-# Keep the existing sessions.csv layout unchanged for now.
-# Game-over status remains available in events.csv and can
-# be added during the later database/dashboard migration.
-# ---------------------------------------------------------
-
-history_exists = (
-    SESSION_HISTORY_FILE.exists()
-)
-
-history_is_empty = (
-    not history_exists
-    or SESSION_HISTORY_FILE.stat().st_size == 0
-)
-
-with SESSION_HISTORY_FILE.open(
-    "a",
-    newline="",
-    encoding="utf-8",
-) as file:
-    writer = csv.writer(file)
-
-    if history_is_empty:
-        writer.writerow(
-            [
-                "session_id",
-                "start_time",
-                "end_time",
-                "duration_seconds",
-                "final_score",
-                "lives_lost",
-                "bonus_lives",
-                "boards_cleared",
-                "starting_board",
-                "ending_board",
-                "furthest_board",
-                "session_size_bytes",
-                "mame_exit_code",
-                "session_folder",
-            ]
+    if not MAME_EXECUTABLE.exists():
+        raise FileNotFoundError(
+            f"MAME executable was not found at:\n"
+            f"{MAME_EXECUTABLE}"
         )
 
-    writer.writerow(
-        [
-            session_name,
-            start_time.isoformat(),
-            end_time.isoformat(),
-            round(duration_seconds, 3),
-            final_score,
-            lives_lost,
-            bonus_lives,
-            boards_cleared,
-            starting_board,
-            ending_board,
-            furthest_board,
-            session_size,
-            return_code,
-            str(session_folder.resolve()),
-        ]
+
+def prepare_data_folders() -> None:
+    """Create tracker data directories when needed."""
+
+    DATA_FOLDER.mkdir(
+        parents=True,
+        exist_ok=True,
     )
 
-total_sessions = len(
-    [
+    SESSIONS_FOLDER.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+
+def print_tracker_storage() -> None:
+    """Print current tracked-session storage information."""
+
+    existing_sessions = [
         path
         for path in SESSIONS_FOLDER.iterdir()
         if path.is_dir()
     ]
-)
 
-total_storage = get_folder_size(
-    SESSIONS_FOLDER
-)
+    existing_storage = get_folder_size(
+        SESSIONS_FOLDER
+    )
 
-print()
-print("Session saved.")
-print(
-    f"Total tracked sessions: "
-    f"{total_sessions}"
-)
-print(
-    f"Total tracker storage: "
-    f"{format_bytes(total_storage)}"
-)
+    print("Tracker storage:")
+    print(
+        f"  Existing sessions: "
+        f"{len(existing_sessions)}"
+    )
+    print(
+        f"  Disk usage: "
+        f"{format_bytes(existing_storage)}"
+    )
+    print()
+
+
+def build_mame_command(
+    tracking_enabled: bool,
+) -> list[str]:
+    """Build the command used to launch Donkey Kong."""
+
+    command = [
+        "./mame",
+        ROM_NAME,
+    ]
+
+    if tracking_enabled:
+        command.extend(
+            [
+                "-plugin",
+                PLUGIN_NAME,
+            ]
+        )
+    else:
+        command.extend(
+            [
+                "-noplugin",
+                PLUGIN_NAME,
+            ]
+        )
+
+    return command
+
+
+def run_mame(
+    tracking_enabled: bool,
+) -> int:
+    """Launch MAME and return its exit code."""
+
+    command = build_mame_command(
+        tracking_enabled
+    )
+
+    return subprocess.run(
+        command,
+        cwd=MAME_FOLDER,
+        check=False,
+    ).returncode
+
+
+def append_session_history(
+    session_name: str,
+    start_time: datetime,
+    end_time: datetime,
+    duration_seconds: float,
+    final_score: int,
+    lives_lost: int,
+    bonus_lives: int,
+    boards_cleared: int,
+    starting_board: str,
+    ending_board: str,
+    furthest_board: str,
+    session_size: int,
+    return_code: int,
+    session_folder: Path,
+) -> None:
+    """Append one tracked session to the persistent history CSV."""
+
+    history_exists = (
+        SESSION_HISTORY_FILE.exists()
+    )
+
+    history_is_empty = (
+        not history_exists
+        or SESSION_HISTORY_FILE.stat().st_size == 0
+    )
+
+    with SESSION_HISTORY_FILE.open(
+        "a",
+        newline="",
+        encoding="utf-8",
+    ) as file:
+        writer = csv.writer(file)
+
+        if history_is_empty:
+            writer.writerow(
+                [
+                    "session_id",
+                    "start_time",
+                    "end_time",
+                    "duration_seconds",
+                    "final_score",
+                    "lives_lost",
+                    "bonus_lives",
+                    "boards_cleared",
+                    "starting_board",
+                    "ending_board",
+                    "furthest_board",
+                    "session_size_bytes",
+                    "mame_exit_code",
+                    "session_folder",
+                ]
+            )
+
+        writer.writerow(
+            [
+                session_name,
+                start_time.isoformat(),
+                end_time.isoformat(),
+                round(duration_seconds, 3),
+                final_score,
+                lives_lost,
+                bonus_lives,
+                boards_cleared,
+                starting_board,
+                ending_board,
+                furthest_board,
+                session_size,
+                return_code,
+                str(session_folder.resolve()),
+            ]
+        )
+
+
+# ---------------------------------------------------------
+# Launch modes
+# ---------------------------------------------------------
+
+def launch_untracked_game() -> LaunchResult:
+    """Launch Donkey Kong without creating tracker data."""
+
+    print("===================================")
+    print("        DK Tracker")
+    print("===================================")
+    print()
+    print("UNTRACKED PLAY")
+    print("No session statistics will be saved.")
+    print()
+
+    start_time = datetime.now()
+
+    return_code = run_mame(
+        tracking_enabled=False
+    )
+
+    end_time = datetime.now()
+    duration = end_time - start_time
+
+    print()
+    print("Game finished!")
+    print(f"Ended: {end_time}")
+    print(f"Duration: {duration}")
+    print(f"MAME exit code: {return_code}")
+    print()
+    print("No tracker session was created.")
+
+    return LaunchResult(
+        tracking_enabled=False,
+        return_code=return_code,
+    )
+
+
+def launch_tracked_game() -> LaunchResult:
+    """Launch Donkey Kong with telemetry and save a session."""
+
+    print("===================================")
+    print("        DK Tracker")
+    print("===================================")
+    print()
+
+    prepare_data_folders()
+    print_tracker_storage()
+
+    start_time = datetime.now()
+
+    session_name = start_time.strftime(
+        "%Y-%m-%d_%H-%M-%S"
+    )
+
+    session_folder = (
+        SESSIONS_FOLDER / session_name
+    )
+
+    session_folder.mkdir(
+        parents=True,
+        exist_ok=False,
+    )
+
+    score_file = (
+        session_folder / "score_log.csv"
+    )
+
+    event_file = (
+        session_folder / "events.csv"
+    )
+
+    print("TRACKING ACTIVE")
+    print(f"Session started: {start_time}")
+    print(f"Session folder: {session_folder}")
+    print()
+
+    score_path_file = (
+        MAME_FOLDER / "score_path.txt"
+    )
+
+    events_path_file = (
+        MAME_FOLDER / "events_path.txt"
+    )
+
+    score_path_file.write_text(
+        str(score_file.resolve()),
+        encoding="utf-8",
+    )
+
+    events_path_file.write_text(
+        str(event_file.resolve()),
+        encoding="utf-8",
+    )
+
+    return_code = run_mame(
+        tracking_enabled=True
+    )
+
+    end_time = datetime.now()
+    duration = end_time - start_time
+    duration_seconds = duration.total_seconds()
+
+    score_rows = read_csv_rows(score_file)
+    event_rows = read_csv_rows(event_file)
+
+    final_score = get_final_score(score_rows)
+
+    lives_lost = count_events(
+        event_rows,
+        "life_lost",
+    )
+
+    boards_cleared = count_events(
+        event_rows,
+        "level_transition",
+    )
+
+    bonus_lives = count_events(
+        event_rows,
+        "bonus_life",
+    )
+
+    game_over = has_event(
+        event_rows,
+        "game_over",
+    )
+
+    (
+        starting_board,
+        ending_board,
+        furthest_board,
+    ) = get_board_summary(event_rows)
+
+    session_size = get_folder_size(
+        session_folder
+    )
+
+    print()
+    print("Game finished!")
+    print(f"Ended: {end_time}")
+    print(f"Duration: {duration}")
+    print()
+
+    print("===================================")
+    print("        Session Summary")
+    print("===================================")
+    print(f"Final score: {final_score}")
+    print(f"Lives lost: {lives_lost}")
+    print(f"Bonus lives: {bonus_lives}")
+    print(f"Boards cleared: {boards_cleared}")
+    print(f"Game over: {'Yes' if game_over else 'No'}")
+    print(f"Starting board: {starting_board}")
+    print(f"Ending board: {ending_board}")
+    print(f"Furthest board: {furthest_board}")
+    print(
+        f"Session storage: "
+        f"{format_bytes(session_size)}"
+    )
+    print(f"MAME exit code: {return_code}")
+    print()
+    print("Files written:")
+    print(f"  {score_file}")
+    print(f"  {event_file}")
+    print("===================================")
+
+    append_session_history(
+        session_name=session_name,
+        start_time=start_time,
+        end_time=end_time,
+        duration_seconds=duration_seconds,
+        final_score=final_score,
+        lives_lost=lives_lost,
+        bonus_lives=bonus_lives,
+        boards_cleared=boards_cleared,
+        starting_board=starting_board,
+        ending_board=ending_board,
+        furthest_board=furthest_board,
+        session_size=session_size,
+        return_code=return_code,
+        session_folder=session_folder,
+    )
+
+    total_sessions = len(
+        [
+            path
+            for path in SESSIONS_FOLDER.iterdir()
+            if path.is_dir()
+        ]
+    )
+
+    total_storage = get_folder_size(
+        SESSIONS_FOLDER
+    )
+
+    print()
+    print("Session saved.")
+    print(
+        f"Total tracked sessions: "
+        f"{total_sessions}"
+    )
+    print(
+        f"Total tracker storage: "
+        f"{format_bytes(total_storage)}"
+    )
+
+    return LaunchResult(
+        tracking_enabled=True,
+        return_code=return_code,
+        session_folder=session_folder,
+        final_score=final_score,
+        lives_lost=lives_lost,
+        bonus_lives=bonus_lives,
+        boards_cleared=boards_cleared,
+        game_over=game_over,
+        starting_board=starting_board,
+        ending_board=ending_board,
+        furthest_board=furthest_board,
+    )
+
+
+def launch_game(
+    tracking_enabled: bool = True,
+) -> LaunchResult:
+    """
+    Launch Donkey Kong in the requested mode.
+
+    This is the function the dashboard will call.
+    """
+
+    validate_mame()
+
+    if tracking_enabled:
+        return launch_tracked_game()
+
+    return launch_untracked_game()
+
+
+# ---------------------------------------------------------
+# Command-line entry point
+# ---------------------------------------------------------
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Launch Donkey Kong through DK Tracker."
+    )
+
+    parser.add_argument(
+        "--no-tracking",
+        action="store_true",
+        help=(
+            "Launch Donkey Kong without the DK Tracker "
+            "plugin or session logging."
+        ),
+    )
+
+    return parser.parse_args()
+
+
+def main() -> int:
+    arguments = parse_arguments()
+
+    try:
+        result = launch_game(
+            tracking_enabled=not arguments.no_tracking
+        )
+
+    except (
+        FileExistsError,
+        FileNotFoundError,
+        OSError,
+    ) as error:
+        print(error)
+        return 1
+
+    return result.return_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
