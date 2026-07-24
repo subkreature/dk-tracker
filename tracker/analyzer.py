@@ -1,5 +1,9 @@
+from statistics import mean, median
+
 from tracker.models import (
     BoardPerformance,
+    Career,
+    CareerSummary,
     GameEvent,
     Session,
     SessionSummary,
@@ -272,4 +276,69 @@ def analyze_session(
         ending_board=ending_board,
         furthest_board=furthest_board,
         board_performances=board_performances,
+    )
+
+
+def analyze_career(
+    career: Career,
+) -> CareerSummary:
+    session_summaries = [
+        analyze_session(session)
+        for session in career.sessions
+    ]
+
+    if not session_summaries:
+        raise ValueError(
+            "No compatible sessions were available "
+            "for career analysis."
+        )
+
+    final_scores = [
+        summary.final_score
+        for summary in session_summaries
+    ]
+
+    first_death_scores = [
+        summary.first_death_score
+        for summary in session_summaries
+        if summary.first_death_score is not None
+    ]
+
+    completed_games = sum(
+        1
+        for summary in session_summaries
+        if summary.game_over
+    )
+
+    return CareerSummary(
+        tracked_sessions=len(session_summaries),
+        skipped_sessions=len(
+            career.failed_sessions
+        ),
+        high_score=max(final_scores),
+        average_score=mean(final_scores),
+        median_score=median(final_scores),
+        lifetime_points=sum(final_scores),
+        total_play_time_seconds=sum(
+            summary.duration_seconds
+            for summary in session_summaries
+        ),
+        total_boards_cleared=sum(
+            summary.boards_cleared
+            for summary in session_summaries
+        ),
+        total_lives_lost=sum(
+            summary.lives_lost
+            for summary in session_summaries
+        ),
+        completed_games=completed_games,
+        quit_or_incomplete_games=(
+            len(session_summaries)
+            - completed_games
+        ),
+        average_first_death_score=(
+            mean(first_death_scores)
+            if first_death_scores
+            else None
+        ),
     )

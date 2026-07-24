@@ -2,6 +2,8 @@ import csv
 from pathlib import Path
 
 from tracker.models import (
+    Career,
+    FailedSession,
     GameEvent,
     ScoreSample,
     Session,
@@ -239,4 +241,68 @@ def load_session(
             event_rows,
             events_log,
         ),
+    )
+
+
+def find_session_folders(
+    career_path: Path,
+) -> list[Path]:
+    if not career_path.exists():
+        raise FileNotFoundError(
+            f"Career folder not found:\n{career_path}"
+        )
+
+    if not career_path.is_dir():
+        raise NotADirectoryError(
+            f"Career path is not a folder:\n"
+            f"{career_path}"
+        )
+
+    return sorted(
+        folder
+        for folder in career_path.iterdir()
+        if folder.is_dir()
+        and not folder.name.startswith(".")
+    )
+
+
+def load_career(
+    career_path: Path,
+) -> Career:
+    session_folders = find_session_folders(
+        career_path
+    )
+
+    if not session_folders:
+        raise ValueError(
+            f"No session folders found in:\n"
+            f"{career_path}"
+        )
+
+    sessions: list[Session] = []
+    failed_sessions: list[FailedSession] = []
+
+    for session_folder in session_folders:
+        try:
+            sessions.append(
+                load_session(session_folder)
+            )
+
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            ValueError,
+        ) as error:
+            failed_sessions.append(
+                FailedSession(
+                    folder=session_folder,
+                    reason=str(error),
+                )
+            )
+
+    return Career(
+        folder=career_path,
+        sessions=sessions,
+        failed_sessions=failed_sessions,
     )

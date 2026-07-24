@@ -75,3 +75,32 @@ class SessionSummary:
     ending_board: str | None
     furthest_board: str | None
     board_performances: list[BoardPerformance]
+
+
+@dataclass(frozen=True)
+class FailedSession:
+    folder: Path
+    reason: str
+
+
+@dataclass
+class Career:
+    folder: Path
+    sessions: list[Session]
+    failed_sessions: list[FailedSession]
+
+
+@dataclass(frozen=True)
+class CareerSummary:
+    tracked_sessions: int
+    skipped_sessions: int
+    high_score: int
+    average_score: float
+    median_score: float
+    lifetime_points: int
+    total_play_time_seconds: float
+    total_boards_cleared: int
+    total_lives_lost: int
+    completed_games: int
+    quit_or_incomplete_games: int
+    average_first_death_score: float | None
