@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import csv
 from datetime import datetime
 from html import escape
 from http import HTTPStatus
@@ -8,6 +11,7 @@ from http.server import (
 import json
 from pathlib import Path
 import threading
+import time
 import webbrowser
 
 from launcher import (
@@ -72,18 +76,21 @@ def update_launch_state(
 
 def is_game_running() -> bool:
     """
-    Return whether a tracked or untracked game is active.
+    Return whether a game is starting or currently active.
     """
 
     with LAUNCH_LOCK:
-        return LAUNCH_STATE["state"] == "running"
+        return LAUNCH_STATE["state"] in {
+            "starting",
+            "running",
+        }
 
 
 def format_mode_name(
     tracking_enabled: bool,
 ) -> str:
     """
-    Return a player-facing name for the launch mode.
+    Return a player-facing launch-mode name.
     """
 
     if tracking_enabled:
@@ -103,6 +110,8 @@ def run_game_in_background(
         tracking_enabled
     )
 
+    started_at = datetime.now()
+
     update_launch_state(
         state="running",
         mode=mode,
@@ -111,7 +120,7 @@ def run_game_in_background(
             if tracking_enabled
             else "Untracked play active."
         ),
-        started_at=datetime.now().isoformat(),
+        started_at=started_at.isoformat(),
         ended_at=None,
         return_code=None,
         session_folder=None,
@@ -188,8 +197,12 @@ def request_game_launch(
     """
 
     with LAUNCH_LOCK:
-        if LAUNCH_STATE["state"] == "running":
+        if LAUNCH_STATE["state"] in {
+            "starting",
+            "running",
+        }:
             response = dict(LAUNCH_STATE)
+
             response["accepted"] = False
             response["message"] = (
                 "A game is already running."
@@ -213,7 +226,7 @@ def request_game_launch(
                     if tracking_enabled
                     else "Starting untracked play..."
                 ),
-                "started_at": None,
+                "started_at": datetime.now().isoformat(),
                 "ended_at": None,
                 "return_code": None,
                 "session_folder": None,
@@ -246,6 +259,549 @@ def request_game_launch(
 
 
 # ---------------------------------------------------------
+# Live session telemetry
+# ---------------------------------------------------------
+
+def parse_iso_datetime(
+    value: object,
+) -> datetime | None:
+    """
+    Parse an ISO datetime value safely.
+    """
+
+    if not isinstance(value, str):
+        return None
+
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def get_session_directories() -> list[Path]:
+    """
+    Return all existing tracked-session directories.
+    """
+
+    if not SESSIONS_FOLDER.exists():
+        return []
+
+    try:
+        return [
+            path
+            for path in SESSIONS_FOLDER.iterdir()
+            if path.is_dir()
+        ]
+    except OSError:
+        return []
+
+
+def find_active_session_folder(
+    launch_state: dict[str, object],
+) -> Path | None:
+    """
+    Locate the tracked session created for the active game.
+
+    launcher.py creates the session directory immediately
+    before MAME starts. The dashboard can therefore identify
+    it using the launch start time.
+    """
+
+    configured_folder = launch_state.get(
+        "session_folder"
+    )
+
+    if isinstance(configured_folder, str):
+        candidate = Path(configured_folder)
+
+        if candidate.is_dir():
+            return candidate
+
+    if launch_state.get("mode") != "tracked":
+        return None
+
+    if launch_state.get("state") not in {
+        "starting",
+        "running",
+    }:
+        return None
+
+    started_at = parse_iso_datetime(
+        launch_state.get("started_at")
+    )
+
+    session_directories = (
+        get_session_directories()
+    )
+
+    if not session_directories:
+        return None
+
+    matching_directories: list[
+        tuple[float, Path]
+    ] = []
+
+    for directory in session_directories:
+        try:
+            modified_timestamp = (
+                directory.stat().st_mtime
+            )
+        except OSError:
+            continue
+
+        if started_at is not None:
+            launch_timestamp = (
+                started_at.timestamp()
+            )
+
+            if modified_timestamp < (
+                launch_timestamp - 3.0
+            ):
+                continue
+
+        matching_directories.append(
+            (
+                modified_timestamp,
+                directory,
+            )
+        )
+
+    if not matching_directories:
+        return None
+
+    matching_directories.sort(
+        key=lambda item: item[0],
+        reverse=True,
+    )
+
+    active_folder = (
+        matching_directories[0][1]
+    )
+
+    update_launch_state(
+        session_folder=str(
+            active_folder.resolve()
+        )
+    )
+
+    return active_folder
+
+
+def read_live_csv_rows(
+    csv_file: Path,
+) -> list[dict[str, str]]:
+    """
+    Read a CSV that may currently be receiving writes.
+
+    Invalid or incomplete rows are ignored rather than
+    causing the live endpoint to fail.
+    """
+
+    if not csv_file.exists():
+        return []
+
+    try:
+        with csv_file.open(
+            "r",
+            newline="",
+            encoding="utf-8",
+            errors="replace",
+        ) as file:
+            reader = csv.DictReader(file)
+
+            if reader.fieldnames is None:
+                return []
+
+            expected_fields = {
+                field.strip()
+                for field in reader.fieldnames
+                if field is not None
+            }
+
+            rows: list[dict[str, str]] = []
+
+            for raw_row in reader:
+                if raw_row is None:
+                    continue
+
+                if None in raw_row:
+                    continue
+
+                cleaned_row: dict[str, str] = {}
+
+                for key, value in raw_row.items():
+                    if key is None:
+                        continue
+
+                    cleaned_key = key.strip()
+
+                    if cleaned_key not in expected_fields:
+                        continue
+
+                    cleaned_row[cleaned_key] = (
+                        value.strip()
+                        if isinstance(value, str)
+                        else ""
+                    )
+
+                if cleaned_row:
+                    rows.append(cleaned_row)
+
+            return rows
+
+    except (
+        OSError,
+        csv.Error,
+        UnicodeError,
+    ):
+        return []
+
+
+def parse_nonnegative_int(
+    value: object,
+) -> int | None:
+    """
+    Parse a nonnegative integer safely.
+    """
+
+    try:
+        parsed = int(str(value))
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+    if parsed < 0:
+        return None
+
+    return parsed
+
+
+def parse_positive_int(
+    value: object,
+) -> int | None:
+    """
+    Parse a positive integer safely.
+    """
+
+    parsed = parse_nonnegative_int(
+        value
+    )
+
+    if parsed is None or parsed <= 0:
+        return None
+
+    return parsed
+
+
+def get_live_score(
+    score_rows: list[dict[str, str]],
+) -> int:
+    """
+    Return the highest valid score recorded so far.
+    """
+
+    scores: list[int] = []
+
+    for row in score_rows:
+        score = parse_nonnegative_int(
+            row.get("score")
+        )
+
+        if score is not None:
+            scores.append(score)
+
+    return max(
+        scores,
+        default=0,
+    )
+
+
+def count_live_events(
+    event_rows: list[dict[str, str]],
+    event_name: str,
+) -> int:
+    """
+    Count matching telemetry events.
+    """
+
+    return sum(
+        1
+        for row in event_rows
+        if row.get("event") == event_name
+    )
+
+
+def format_board_name(
+    level: int,
+    board_position: int,
+    screen_name: str,
+) -> str:
+    """
+    Build a readable board label.
+    """
+
+    cleaned_name = (
+        screen_name
+        .strip()
+        .replace("_", " ")
+    )
+
+    if (
+        cleaned_name
+        and cleaned_name != "unknown"
+    ):
+        return (
+            f"{level}-{board_position} "
+            f"({cleaned_name})"
+        )
+
+    return f"{level}-{board_position}"
+
+
+def get_current_board(
+    event_rows: list[dict[str, str]],
+) -> str:
+    """
+    Return the most recently started board.
+    """
+
+    for row in reversed(event_rows):
+        if row.get("event") != "board_start":
+            continue
+
+        level = parse_positive_int(
+            row.get("level")
+        )
+
+        board_position = parse_positive_int(
+            row.get("board_position")
+        )
+
+        if (
+            level is None
+            or board_position is None
+        ):
+            continue
+
+        screen_name = row.get(
+            "screen_name",
+            "unknown",
+        )
+
+        return format_board_name(
+            level,
+            board_position,
+            screen_name,
+        )
+
+    return "Waiting for game start"
+
+
+def calculate_elapsed_seconds(
+    launch_state: dict[str, object],
+) -> int:
+    """
+    Return elapsed launch time in whole seconds.
+    """
+
+    started_at = parse_iso_datetime(
+        launch_state.get("started_at")
+    )
+
+    if started_at is None:
+        return 0
+
+    ended_at = parse_iso_datetime(
+        launch_state.get("ended_at")
+    )
+
+    comparison_time = (
+        ended_at
+        if ended_at is not None
+        else datetime.now()
+    )
+
+    elapsed = (
+        comparison_time - started_at
+    ).total_seconds()
+
+    return max(
+        0,
+        int(elapsed),
+    )
+
+
+def build_inactive_live_state(
+    launch_state: dict[str, object],
+) -> dict[str, object]:
+    """
+    Return live-state data when tracking is inactive.
+    """
+
+    mode = launch_state.get("mode")
+    state = launch_state.get("state")
+
+    if (
+        mode == "untracked"
+        and state in {
+            "starting",
+            "running",
+        }
+    ):
+        message = (
+            "Untracked play is active. "
+            "No telemetry is being recorded."
+        )
+    elif (
+        mode == "tracked"
+        and state == "starting"
+    ):
+        message = (
+            "Waiting for the tracked session "
+            "folder to be created."
+        )
+    elif (
+        mode == "tracked"
+        and state == "finished"
+    ):
+        message = (
+            "The tracked session has ended "
+            "and is now finalized."
+        )
+    else:
+        message = (
+            "Start a tracked game to view "
+            "live telemetry."
+        )
+
+    return {
+        "active": False,
+        "tracking": False,
+        "state": state,
+        "mode": mode,
+        "message": message,
+        "session_name": None,
+        "score": 0,
+        "current_board": "Not active",
+        "lives_lost": 0,
+        "boards_cleared": 0,
+        "bonus_lives": 0,
+        "elapsed_seconds":
+            calculate_elapsed_seconds(
+                launch_state
+            ),
+    }
+
+
+def get_live_session_state() -> dict[str, object]:
+    """
+    Build provisional telemetry for the active session.
+    """
+
+    launch_state = get_launch_state()
+
+    if launch_state.get("mode") != "tracked":
+        return build_inactive_live_state(
+            launch_state
+        )
+
+    if launch_state.get("state") not in {
+        "starting",
+        "running",
+    }:
+        return build_inactive_live_state(
+            launch_state
+        )
+
+    session_folder = find_active_session_folder(
+        launch_state
+    )
+
+    if session_folder is None:
+        return {
+            "active": False,
+            "tracking": True,
+            "state": launch_state.get(
+                "state"
+            ),
+            "mode": "tracked",
+            "message": (
+                "Tracking is active. Waiting "
+                "for telemetry files."
+            ),
+            "session_name": None,
+            "score": 0,
+            "current_board":
+                "Waiting for game start",
+            "lives_lost": 0,
+            "boards_cleared": 0,
+            "bonus_lives": 0,
+            "elapsed_seconds":
+                calculate_elapsed_seconds(
+                    launch_state
+                ),
+        }
+
+    score_file = (
+        session_folder / "score_log.csv"
+    )
+
+    event_file = (
+        session_folder / "events.csv"
+    )
+
+    score_rows = read_live_csv_rows(
+        score_file
+    )
+
+    event_rows = read_live_csv_rows(
+        event_file
+    )
+
+    return {
+        "active": True,
+        "tracking": True,
+        "state": launch_state.get(
+            "state"
+        ),
+        "mode": "tracked",
+        "message": (
+            "Live tracked session in progress."
+        ),
+        "session_name":
+            session_folder.name,
+        "score": get_live_score(
+            score_rows
+        ),
+        "current_board":
+            get_current_board(
+                event_rows
+            ),
+        "lives_lost":
+            count_live_events(
+                event_rows,
+                "life_lost",
+            ),
+        "boards_cleared":
+            count_live_events(
+                event_rows,
+                "level_transition",
+            ),
+        "bonus_lives":
+            count_live_events(
+                event_rows,
+                "bonus_life",
+            ),
+        "elapsed_seconds":
+            calculate_elapsed_seconds(
+                launch_state
+            ),
+    }
+
+
+# ---------------------------------------------------------
 # Dashboard data
 # ---------------------------------------------------------
 
@@ -255,7 +811,7 @@ def load_dashboard_data() -> tuple[
     str,
 ]:
     """
-    Load the career summary and most recent compatible session.
+    Load career data and the latest compatible session.
     """
 
     career = load_career(
@@ -274,7 +830,8 @@ def load_dashboard_data() -> tuple[
 
     latest_session = max(
         career.sessions,
-        key=lambda session: session.folder.name,
+        key=lambda session:
+            session.folder.name,
     )
 
     latest_session_summary = analyze_session(
@@ -294,7 +851,7 @@ def load_dashboard_data() -> tuple[
 
 def build_dashboard_html() -> str:
     """
-    Build the main dashboard page using current career data.
+    Build the main dashboard page.
     """
 
     try:
@@ -383,7 +940,11 @@ def build_dashboard_html() -> str:
 
         h1 {{
             margin: 0;
-            font-size: clamp(2.4rem, 8vw, 5rem);
+            font-size: clamp(
+                2.4rem,
+                8vw,
+                5rem
+            );
             letter-spacing: 0.08em;
         }}
 
@@ -392,7 +953,7 @@ def build_dashboard_html() -> str:
             color: var(--secondary-text);
         }}
 
-        .launch-panel {{
+        .panel {{
             margin-bottom: 24px;
             padding: 24px;
             border: 1px solid var(--card-border);
@@ -400,12 +961,12 @@ def build_dashboard_html() -> str:
             background: var(--panel-background);
         }}
 
-        .launch-heading {{
+        .panel-heading {{
             margin: 0 0 8px;
             font-size: 1.25rem;
         }}
 
-        .launch-description {{
+        .panel-description {{
             margin: 0 0 20px;
             color: var(--secondary-text);
         }}
@@ -495,6 +1056,102 @@ def build_dashboard_html() -> str:
             font-size: 0.9rem;
         }}
 
+        .live-panel {{
+            display: none;
+        }}
+
+        .live-panel.visible {{
+            display: block;
+        }}
+
+        .live-header {{
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }}
+
+        .live-title-group {{
+            min-width: 0;
+        }}
+
+        .live-heading {{
+            margin: 0;
+            font-size: 1.25rem;
+        }}
+
+        .live-session-name {{
+            margin: 6px 0 0;
+            overflow-wrap: anywhere;
+            color: var(--secondary-text);
+            font-size: 0.9rem;
+        }}
+
+        .live-badge {{
+            flex: 0 0 auto;
+            padding: 7px 10px;
+            border: 1px solid var(--success);
+            border-radius: 999px;
+            color: var(--success);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }}
+
+        .live-grid {{
+            display: grid;
+            grid-template-columns:
+                repeat(
+                    auto-fit,
+                    minmax(150px, 1fr)
+                );
+            gap: 14px;
+        }}
+
+        .live-card {{
+            min-height: 112px;
+            padding: 18px;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            background: var(--card-background);
+        }}
+
+        .live-card.wide {{
+            grid-column: span 2;
+        }}
+
+        .live-label {{
+            margin: 0;
+            color: var(--secondary-text);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }}
+
+        .live-value {{
+            margin: 14px 0 0;
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+        }}
+
+        .live-value.score {{
+            color: var(--accent);
+            font-size: clamp(
+                2.4rem,
+                7vw,
+                4rem
+            );
+        }}
+
+        .live-message {{
+            margin: 18px 0 0;
+            color: var(--secondary-text);
+            text-align: center;
+        }}
+
         .metric-grid {{
             display: grid;
             grid-template-columns:
@@ -527,7 +1184,11 @@ def build_dashboard_html() -> str:
         .metric-value {{
             margin: 16px 0;
             color: var(--primary-text);
-            font-size: clamp(2.3rem, 7vw, 4rem);
+            font-size: clamp(
+                2.3rem,
+                7vw,
+                4rem
+            );
             font-weight: 700;
             line-height: 1;
         }}
@@ -565,6 +1226,14 @@ def build_dashboard_html() -> str:
                 grid-template-columns: 1fr;
             }}
 
+            .live-header {{
+                flex-direction: column;
+            }}
+
+            .live-card.wide {{
+                grid-column: span 1;
+            }}
+
             .metric-card {{
                 min-height: 145px;
             }}
@@ -583,17 +1252,17 @@ def build_dashboard_html() -> str:
         </header>
 
         <section
-            class="launch-panel"
+            class="panel"
             aria-labelledby="launch-heading"
         >
             <h2
                 id="launch-heading"
-                class="launch-heading"
+                class="panel-heading"
             >
                 Play Donkey Kong
             </h2>
 
-            <p class="launch-description">
+            <p class="panel-description">
                 Choose whether this game should be recorded
                 in your DK Tracker career statistics.
             </p>
@@ -642,6 +1311,122 @@ def build_dashboard_html() -> str:
                     No game is currently running.
                 </p>
             </div>
+        </section>
+
+        <section
+            id="live-panel"
+            class="panel live-panel"
+            aria-labelledby="live-heading"
+            aria-live="polite"
+        >
+            <div class="live-header">
+                <div class="live-title-group">
+                    <h2
+                        id="live-heading"
+                        class="live-heading"
+                    >
+                        Live Session
+                    </h2>
+
+                    <p
+                        id="live-session-name"
+                        class="live-session-name"
+                    >
+                        Waiting for telemetry
+                    </p>
+                </div>
+
+                <span class="live-badge">
+                    In Progress
+                </span>
+            </div>
+
+            <div class="live-grid">
+                <article class="live-card wide">
+                    <p class="live-label">
+                        Current Score
+                    </p>
+
+                    <p
+                        id="live-score"
+                        class="live-value score"
+                    >
+                        0
+                    </p>
+                </article>
+
+                <article class="live-card wide">
+                    <p class="live-label">
+                        Current Board
+                    </p>
+
+                    <p
+                        id="live-board"
+                        class="live-value"
+                    >
+                        Waiting for game start
+                    </p>
+                </article>
+
+                <article class="live-card">
+                    <p class="live-label">
+                        Lives Lost
+                    </p>
+
+                    <p
+                        id="live-lives-lost"
+                        class="live-value"
+                    >
+                        0
+                    </p>
+                </article>
+
+                <article class="live-card">
+                    <p class="live-label">
+                        Boards Cleared
+                    </p>
+
+                    <p
+                        id="live-boards-cleared"
+                        class="live-value"
+                    >
+                        0
+                    </p>
+                </article>
+
+                <article class="live-card">
+                    <p class="live-label">
+                        Bonus Lives
+                    </p>
+
+                    <p
+                        id="live-bonus-lives"
+                        class="live-value"
+                    >
+                        0
+                    </p>
+                </article>
+
+                <article class="live-card">
+                    <p class="live-label">
+                        Elapsed Time
+                    </p>
+
+                    <p
+                        id="live-elapsed"
+                        class="live-value"
+                    >
+                        00:00
+                    </p>
+                </article>
+            </div>
+
+            <p
+                id="live-message"
+                class="live-message"
+            >
+                Live tracked session in progress.
+            </p>
         </section>
 
         <section
@@ -710,35 +1495,86 @@ def build_dashboard_html() -> str:
 
         <div class="status-panel">
             <strong>Dashboard active.</strong>
-            Launch status updates automatically.
+            Launch and live telemetry update automatically.
         </div>
     </main>
 
     <script>
-        const trackedButton = document.getElementById(
-            "tracked-button"
-        );
+        const trackedButton =
+            document.getElementById(
+                "tracked-button"
+            );
 
-        const untrackedButton = document.getElementById(
-            "untracked-button"
-        );
+        const untrackedButton =
+            document.getElementById(
+                "untracked-button"
+            );
 
-        const statusIndicator = document.getElementById(
-            "status-indicator"
-        );
+        const statusIndicator =
+            document.getElementById(
+                "status-indicator"
+            );
 
-        const statusText = document.getElementById(
-            "launch-status-text"
-        );
+        const statusText =
+            document.getElementById(
+                "launch-status-text"
+            );
 
-        const statusDetail = document.getElementById(
-            "launch-status-detail"
-        );
+        const statusDetail =
+            document.getElementById(
+                "launch-status-detail"
+            );
+
+        const livePanel =
+            document.getElementById(
+                "live-panel"
+            );
+
+        const liveSessionName =
+            document.getElementById(
+                "live-session-name"
+            );
+
+        const liveScore =
+            document.getElementById(
+                "live-score"
+            );
+
+        const liveBoard =
+            document.getElementById(
+                "live-board"
+            );
+
+        const liveLivesLost =
+            document.getElementById(
+                "live-lives-lost"
+            );
+
+        const liveBoardsCleared =
+            document.getElementById(
+                "live-boards-cleared"
+            );
+
+        const liveBonusLives =
+            document.getElementById(
+                "live-bonus-lives"
+            );
+
+        const liveElapsed =
+            document.getElementById(
+                "live-elapsed"
+            );
+
+        const liveMessage =
+            document.getElementById(
+                "live-message"
+            );
 
         let previousState = null;
-        let previousMode = null;
 
-        function setButtonsDisabled(disabled) {{
+        function setButtonsDisabled(
+            disabled
+        ) {{
             trackedButton.disabled = disabled;
             untrackedButton.disabled = disabled;
         }}
@@ -751,13 +1587,15 @@ def build_dashboard_html() -> str:
                 if (status.mode === "tracked") {{
                     return (
                         "Telemetry is active. "
-                        + "This session will be saved when MAME closes."
+                        + "This session will be saved "
+                        + "when MAME closes."
                     );
                 }}
 
                 return (
                     "Telemetry is disabled. "
-                    + "This game will not affect career statistics."
+                    + "This game will not affect "
+                    + "career statistics."
                 );
             }}
 
@@ -773,7 +1611,9 @@ def build_dashboard_html() -> str:
                 ) {{
                     return (
                         "Final tracked score: "
-                        + Number(score).toLocaleString()
+                        + Number(
+                            score
+                        ).toLocaleString()
                     );
                 }}
 
@@ -793,24 +1633,27 @@ def build_dashboard_html() -> str:
 
             if (status.state === "error") {{
                 return (
-                    "Check the terminal running dashboard.py "
-                    + "for additional details."
+                    "Check the terminal running "
+                    + "dashboard.py for details."
                 );
             }}
 
-            return "No game is currently running.";
+            return (
+                "No game is currently running."
+            );
         }}
 
         function renderStatus(status) {{
-            const state = status.state || "ready";
+            const state =
+                status.state || "ready";
 
             statusText.textContent = (
-                status.message || "Ready to play."
+                status.message
+                || "Ready to play."
             );
 
-            statusDetail.textContent = getStatusDetail(
-                status
-            );
+            statusDetail.textContent =
+                getStatusDetail(status);
 
             statusIndicator.className = (
                 "status-indicator "
@@ -829,20 +1672,135 @@ def build_dashboard_html() -> str:
             setButtonsDisabled(gameActive);
 
             const trackedGameJustFinished = (
-                previousState === "running"
+                (
+                    previousState === "running"
+                    || previousState === "starting"
+                )
                 && state === "finished"
                 && status.mode === "tracked"
             );
 
             previousState = state;
-            previousMode = status.mode;
 
             if (trackedGameJustFinished) {{
                 window.setTimeout(
-                    () => window.location.reload(),
+                    () =>
+                        window.location.reload(),
                     1200
                 );
             }}
+        }}
+
+        function formatElapsedTime(
+            totalSeconds
+        ) {{
+            const safeSeconds = Math.max(
+                0,
+                Number(totalSeconds) || 0
+            );
+
+            const hours = Math.floor(
+                safeSeconds / 3600
+            );
+
+            const minutes = Math.floor(
+                (
+                    safeSeconds % 3600
+                ) / 60
+            );
+
+            const seconds = Math.floor(
+                safeSeconds % 60
+            );
+
+            const paddedMinutes = String(
+                minutes
+            ).padStart(
+                2,
+                "0"
+            );
+
+            const paddedSeconds = String(
+                seconds
+            ).padStart(
+                2,
+                "0"
+            );
+
+            if (hours > 0) {{
+                return (
+                    String(hours)
+                    + ":"
+                    + paddedMinutes
+                    + ":"
+                    + paddedSeconds
+                );
+            }}
+
+            return (
+                paddedMinutes
+                + ":"
+                + paddedSeconds
+            );
+        }}
+
+        function renderLiveState(live) {{
+            const shouldShowPanel = (
+                live.mode === "tracked"
+                && (
+                    live.state === "starting"
+                    || live.state === "running"
+                )
+            );
+
+            livePanel.classList.toggle(
+                "visible",
+                shouldShowPanel
+            );
+
+            if (!shouldShowPanel) {{
+                return;
+            }}
+
+            liveSessionName.textContent = (
+                live.session_name
+                || "Waiting for telemetry files"
+            );
+
+            liveScore.textContent = Number(
+                live.score || 0
+            ).toLocaleString();
+
+            liveBoard.textContent = (
+                live.current_board
+                || "Waiting for game start"
+            );
+
+            liveLivesLost.textContent =
+                Number(
+                    live.lives_lost || 0
+                ).toLocaleString();
+
+            liveBoardsCleared.textContent =
+                Number(
+                    live.boards_cleared || 0
+                ).toLocaleString();
+
+            liveBonusLives.textContent =
+                Number(
+                    live.bonus_lives || 0
+                ).toLocaleString();
+
+            liveElapsed.textContent =
+                formatElapsedTime(
+                    live.elapsed_seconds
+                );
+
+            liveMessage.textContent = (
+                live.message
+                || "Live tracked session "
+                + "in progress."
+            );
         }}
 
         async function fetchStatus() {{
@@ -860,16 +1818,20 @@ def build_dashboard_html() -> str:
                     );
                 }}
 
-                const status = await response.json();
+                const status =
+                    await response.json();
+
                 renderStatus(status);
 
             }} catch (error) {{
                 statusText.textContent = (
-                    "Dashboard connection unavailable."
+                    "Dashboard connection "
+                    + "unavailable."
                 );
 
                 statusDetail.textContent = (
-                    "The local dashboard server did not respond."
+                    "The local dashboard server "
+                    + "did not respond."
                 );
 
                 statusIndicator.className = (
@@ -880,10 +1842,41 @@ def build_dashboard_html() -> str:
             }}
         }}
 
+        async function fetchLiveState() {{
+            try {{
+                const response = await fetch(
+                    "/live",
+                    {{
+                        cache: "no-store",
+                    }}
+                );
+
+                if (!response.ok) {{
+                    throw new Error(
+                        "Live telemetry request "
+                        + "failed."
+                    );
+                }}
+
+                const live =
+                    await response.json();
+
+                renderLiveState(live);
+
+            }} catch (error) {{
+                liveMessage.textContent = (
+                    "Live telemetry is "
+                    + "temporarily unavailable."
+                );
+            }}
+        }}
+
         async function requestLaunch(path) {{
             setButtonsDisabled(true);
 
-            statusText.textContent = "Starting MAME...";
+            statusText.textContent =
+                "Starting MAME...";
+
             statusDetail.textContent = (
                 "Please wait while the game opens."
             );
@@ -904,7 +1897,9 @@ def build_dashboard_html() -> str:
                     }}
                 );
 
-                const status = await response.json();
+                const status =
+                    await response.json();
+
                 renderStatus(status);
 
                 if (!response.ok) {{
@@ -914,6 +1909,8 @@ def build_dashboard_html() -> str:
                     );
                 }}
 
+                await fetchLiveState();
+
             }} catch (error) {{
                 statusText.textContent = (
                     error.message
@@ -921,7 +1918,8 @@ def build_dashboard_html() -> str:
                 );
 
                 statusDetail.textContent = (
-                    "Check the terminal running dashboard.py."
+                    "Check the terminal running "
+                    + "dashboard.py."
                 );
 
                 statusIndicator.className = (
@@ -947,9 +1945,15 @@ def build_dashboard_html() -> str:
         );
 
         fetchStatus();
+        fetchLiveState();
 
         window.setInterval(
             fetchStatus,
+            1000
+        );
+
+        window.setInterval(
+            fetchLiveState,
             1000
         );
     </script>
@@ -1068,16 +2072,20 @@ class DashboardRequestHandler(
     BaseHTTPRequestHandler
 ):
     """
-    Handle browser requests for the local dashboard.
+    Handle browser requests for the dashboard.
     """
 
     def do_GET(self) -> None:
-        requested_path = self.get_requested_path()
+        requested_path = (
+            self.get_requested_path()
+        )
 
         routes = {
             "/": self.serve_dashboard,
-            "/index.html": self.serve_dashboard,
+            "/index.html":
+                self.serve_dashboard,
             "/status": self.serve_status,
+            "/live": self.serve_live,
         }
 
         route_handler = routes.get(
@@ -1093,7 +2101,9 @@ class DashboardRequestHandler(
         route_handler()
 
     def do_POST(self) -> None:
-        requested_path = self.get_requested_path()
+        requested_path = (
+            self.get_requested_path()
+        )
 
         routes = {
             "/launch/tracked":
@@ -1116,7 +2126,7 @@ class DashboardRequestHandler(
 
     def get_requested_path(self) -> str:
         """
-        Return the URL path without its query string.
+        Return the path without its query string.
         """
 
         return self.path.split(
@@ -1126,7 +2136,7 @@ class DashboardRequestHandler(
 
     def serve_dashboard(self) -> None:
         """
-        Serve the main DK Tracker dashboard.
+        Serve the main dashboard.
         """
 
         self.send_html(
@@ -1135,20 +2145,31 @@ class DashboardRequestHandler(
 
     def serve_status(self) -> None:
         """
-        Return the current launcher state as JSON.
+        Return launcher state as JSON.
         """
 
         self.send_json(
             get_launch_state()
         )
 
-    def launch_tracked_game(self) -> None:
+    def serve_live(self) -> None:
         """
-        Start Donkey Kong with telemetry enabled.
+        Return provisional live telemetry.
         """
 
-        response, status = request_game_launch(
-            tracking_enabled=True
+        self.send_json(
+            get_live_session_state()
+        )
+
+    def launch_tracked_game(self) -> None:
+        """
+        Start Donkey Kong with telemetry.
+        """
+
+        response, status = (
+            request_game_launch(
+                tracking_enabled=True
+            )
         )
 
         self.send_json(
@@ -1161,8 +2182,10 @@ class DashboardRequestHandler(
         Start Donkey Kong without telemetry.
         """
 
-        response, status = request_game_launch(
-            tracking_enabled=False
+        response, status = (
+            request_game_launch(
+                tracking_enabled=False
+            )
         )
 
         self.send_json(
@@ -1175,7 +2198,7 @@ class DashboardRequestHandler(
         requested_path: str,
     ) -> None:
         """
-        Serve a 404 response for an unknown route.
+        Serve an HTML 404 response.
         """
 
         self.send_html(
@@ -1191,7 +2214,7 @@ class DashboardRequestHandler(
         status: HTTPStatus = HTTPStatus.OK,
     ) -> None:
         """
-        Send an HTML response to the browser.
+        Send an HTML response.
         """
 
         response_body = html.encode(
@@ -1226,7 +2249,7 @@ class DashboardRequestHandler(
         status: HTTPStatus = HTTPStatus.OK,
     ) -> None:
         """
-        Send a JSON response to the browser.
+        Send a JSON response.
         """
 
         response_body = json.dumps(
@@ -1262,8 +2285,13 @@ class DashboardRequestHandler(
         format_string: str,
         *arguments: object,
     ) -> None:
-        message = format_string % arguments
-        print(f"[Dashboard] {message}")
+        message = (
+            format_string % arguments
+        )
+
+        print(
+            f"[Dashboard] {message}"
+        )
 
 
 # ---------------------------------------------------------
@@ -1272,10 +2300,12 @@ class DashboardRequestHandler(
 
 def open_browser() -> None:
     """
-    Open the dashboard after the server has started.
+    Open the dashboard after startup.
     """
 
-    dashboard_url = f"http://{HOST}:{PORT}"
+    dashboard_url = (
+        f"http://{HOST}:{PORT}"
+    )
 
     timer = threading.Timer(
         0.5,
@@ -1289,7 +2319,7 @@ def open_browser() -> None:
 
 def run_dashboard() -> None:
     """
-    Start and run the local dashboard server.
+    Start the local dashboard server.
     """
 
     server_address = (
@@ -1305,20 +2335,30 @@ def run_dashboard() -> None:
 
     except OSError as error:
         print(
-            "Could not start DK Tracker dashboard "
-            f"on port {PORT}."
+            "Could not start DK Tracker "
+            f"dashboard on port {PORT}."
         )
         print(error)
         return
 
-    dashboard_url = f"http://{HOST}:{PORT}"
+    dashboard_url = (
+        f"http://{HOST}:{PORT}"
+    )
 
     print("===================================")
     print(" DK Tracker Dashboard")
     print("===================================")
     print()
-    print(f"Career data: {SESSIONS_FOLDER}")
-    print(f"Running at : {dashboard_url}")
+    print(
+        f"Career data: {SESSIONS_FOLDER}"
+    )
+    print(
+        f"Running at : {dashboard_url}"
+    )
+    print(
+        "Live route: "
+        f"{dashboard_url}/live"
+    )
     print("Press Control-C to stop.")
     print()
 
