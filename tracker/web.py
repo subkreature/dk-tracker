@@ -3,6 +3,9 @@ from tracker.live import (
     count_live_events,
     get_lives_remaining,
 )
+from tracker.session_detail import (
+    build_session_detail,
+)
 
 import csv
 from datetime import datetime
@@ -2098,12 +2101,16 @@ class DashboardRequestHandler(
         )
 
         routes = {
-            "/": self.serve_dashboard,
-            "/index.html":
-                self.serve_dashboard,
-            "/status": self.serve_status,
-            "/live": self.serve_live,
-        }
+    "/": self.serve_dashboard,
+    "/index.html":
+        self.serve_dashboard,
+    "/session":
+        self.serve_session,
+    "/status":
+        self.serve_status,
+    "/live":
+        self.serve_live,
+}
 
         route_handler = routes.get(
             requested_path
@@ -2158,6 +2165,112 @@ class DashboardRequestHandler(
 
         self.send_html(
             build_dashboard_html()
+        )
+
+    def serve_session(self) -> None:
+        """
+        Serve details for the latest session.
+        """
+
+        try:
+            (
+                _career_summary,
+                _latest_session_summary,
+                latest_session_name,
+            ) = load_dashboard_data()
+
+            session_detail = build_session_detail(
+                SESSIONS_FOLDER
+                / latest_session_name
+            )
+
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            ValueError,
+        ) as error:
+            self.send_html(
+                build_error_html(
+                    title="Session data unavailable",
+                    message=(
+                        "DK Tracker could not load "
+                        "the latest session."
+                    ),
+                    details=str(error),
+                )
+            )
+            return
+
+        duration_seconds = int(
+            session_detail["duration_seconds"]
+        )
+
+        duration_minutes, duration_remainder = divmod(
+            duration_seconds,
+            60,
+        )
+
+        self.send_html(
+            f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>Session Details</title>
+</head>
+<body>
+    <main>
+        <h1>Session Details</h1>
+
+        <p>
+            Session:
+            {escape(latest_session_name)}
+        </p>
+
+        <p>
+            Final Score:
+            {session_detail["final_score"]:,}
+        </p>
+
+        <p>
+            Duration:
+            {duration_minutes}:{duration_remainder:02d}
+        </p>
+
+        <p>
+            Highest Board:
+            {escape(str(session_detail["highest_board"]))}
+        </p>
+
+        <p>
+            Lives Lost:
+            {session_detail["lives_lost"]}
+        </p>
+
+        <p>
+            Bonus Lives:
+            {session_detail["bonus_lives"]}
+        </p>
+
+        <p>
+            Boards Cleared:
+            {session_detail["boards_cleared"]}
+        </p>
+
+        <p>
+            <a href="/">Return to dashboard</a>
+        </p>
+    </main>
+</body>
+</html>
+"""
         )
 
     def serve_status(self) -> None:
