@@ -522,29 +522,6 @@ def get_live_score(
     )
 
 
-
-def get_lives_remaining(
-    event_rows: list[dict[str, str]],
-) -> int | None:
-    """
-    Return the newest valid remaining-lives value.
-
-    The Lua plugin writes the current lives value into every
-    event row. Reading backward gives us the most recent
-    complete value recorded during the active session.
-    """
-
-    for row in reversed(event_rows):
-        lives = parse_nonnegative_int(
-            row.get("lives")
-        )
-
-        if lives is not None:
-            return lives
-
-    return None
-
-
 def format_board_name(
     level: int,
     board_position: int,
