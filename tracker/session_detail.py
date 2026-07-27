@@ -52,6 +52,94 @@ def format_board(level: int, board_position: int) -> str:
     return f"{level}-{board_position}"
 
 
+
+def build_board_splits(
+    events: list[dict[str, Any]],
+    duration_seconds: float,
+) -> list[dict[str, Any]]:
+    """
+    Build per-board timing segments from board starts and transitions.
+
+    A completed split begins with the first board_start after the previous
+    transition and ends at the next level_transition. Any board still active
+    when telemetry ends is included as an incomplete split.
+    """
+    board_splits: list[dict[str, Any]] = []
+    active_start: dict[str, Any] | None = None
+
+    for event in sorted(
+        events,
+        key=lambda item: float(item["elapsed_seconds"]),
+    ):
+        event_name = event["event"]
+
+        if event_name == "board_start":
+            if active_start is None:
+                active_start = event
+            continue
+
+        if (
+            event_name != "level_transition"
+            or active_start is None
+        ):
+            continue
+
+        start_seconds = float(
+            active_start["elapsed_seconds"]
+        )
+        end_seconds = float(event["elapsed_seconds"])
+
+        board_splits.append(
+            {
+                "board": active_start["board"],
+                "screen_name": active_start["screen_name"],
+                "start_seconds": start_seconds,
+                "end_seconds": end_seconds,
+                "duration_seconds": max(
+                    0.0,
+                    end_seconds - start_seconds,
+                ),
+                "score_start": int(active_start["score"]),
+                "score_end": int(event["score"]),
+                "score_gained": max(
+                    0,
+                    int(event["score"])
+                    - int(active_start["score"]),
+                ),
+                "completed": True,
+            }
+        )
+
+        active_start = None
+
+    if active_start is not None:
+        start_seconds = float(
+            active_start["elapsed_seconds"]
+        )
+        end_seconds = max(
+            start_seconds,
+            float(duration_seconds),
+        )
+
+        board_splits.append(
+            {
+                "board": active_start["board"],
+                "screen_name": active_start["screen_name"],
+                "start_seconds": start_seconds,
+                "end_seconds": end_seconds,
+                "duration_seconds": (
+                    end_seconds - start_seconds
+                ),
+                "score_start": int(active_start["score"]),
+                "score_end": None,
+                "score_gained": None,
+                "completed": False,
+            }
+        )
+
+    return board_splits
+
+
 def build_session_detail(session_directory: Path) -> dict[str, Any]:
     """
     Build a dashboard-friendly summary for one tracked session.
@@ -146,6 +234,11 @@ def build_session_detail(session_directory: Path) -> dict[str, Any]:
         default=0.0,
     )
 
+    board_splits = build_board_splits(
+        events,
+        duration_seconds,
+    )
+
     return {
         "session_directory": str(session_directory),
         "final_score": final_score,
@@ -159,4 +252,5 @@ def build_session_detail(session_directory: Path) -> dict[str, Any]:
         "boards_cleared": boards_cleared,
         "score_points": score_points,
         "events": events,
+        "board_splits": board_splits,
     }

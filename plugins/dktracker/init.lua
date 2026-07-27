@@ -1,6 +1,6 @@
 local exports = {
     name = "dktracker",
-    version = "0.1.8",
+    version = "0.1.12",
     description = "Donkey Kong Tracker",
     license = "MIT",
     author = { name = "Nick" }
@@ -12,7 +12,7 @@ local dktracker = exports
 -- Configuration
 ----------------------------------------------------------
 
-local DEBUG_GAME_STATE = true
+local DEBUG_GAME_STATE = false
 local DEBUG_LIVES = true
 
 ----------------------------------------------------------
@@ -157,8 +157,14 @@ function dktracker.startplugin()
     local last_score = -1
     local last_valid_score = 0
 
-    local saw_nonzero_score = false
     local game_started = false
+
+    -- After Game Over, require the old board to go fully
+    -- inactive before accepting another board activation as
+    -- a new game. This prevents attract/Game Over state changes
+    -- from being mistaken for continued play.
+    local waiting_for_new_game = false
+    local new_game_board_went_inactive = false
 
     local last_board_state = nil
     local last_board_active = nil
@@ -619,98 +625,118 @@ function dktracker.startplugin()
 
         if not game_started then
 
-            if score > 0 then
-                saw_nonzero_score = true
+            if
+                waiting_for_new_game
+                and board_active == 0x00
+            then
+                new_game_board_went_inactive = true
             end
 
-            if saw_nonzero_score and score == 0 then
+            local first_board_is_active =
+                last_board_active ~= 0x02
+                and board_active == 0x02
+                and raw_level > 0
+                and is_valid_screen(raw_screen_type)
+                and lives_remaining > 0
 
-                game_started = true
+            if waiting_for_new_game then
+                first_board_is_active =
+                    new_game_board_went_inactive
+                    and first_board_is_active
+            end
 
-                -- Keep one continuous session clock across every
-                -- game played during this MAME launch.
-                if not game_start_time then
-                    game_start_time =
-                        current_emulated_time()
+            if not first_board_is_active then
+                last_board_state = board_state
+                last_board_active = board_active
+                last_aux_state = aux_state
+
+                if lives_monitor_initialized then
+                    last_lives_byte = lives_remaining
                 end
 
-                last_score = 0
-                last_valid_score = 0
-                saw_nonzero_score = false
-
-                last_board_state =
-                    board_state
-
-                last_board_active =
-                    board_active
-
-                last_aux_state =
-                    aux_state
-
-                last_lives_byte = nil
-
-                active_level = 0
-                active_board_position = 0
-                active_screen_type = 0
-
-                first_board_activated = false
-                board_advance_pending = false
-
-                current_lives =
-                    lives_remaining
-                lives_monitor_initialized = false
-
-                life_loss_pending = false
-                life_loss_previous_lives = nil
-                life_loss_new_lives = nil
-
-                bonus_life_pending = false
-                bonus_previous_lives = nil
-                bonus_new_lives = nil
-                bonus_detected_elapsed = nil
-
-                event_detection_armed = false
-
-                final_death_recorded = false
-                game_over_recorded = false
-
-                life_lost_count = 0
-                board_clear_count = 0
-                bonus_life_count = 0
-
-                print("Game started!")
-                print(
-                    string.format(
-                        "Initial level byte: %d",
-                        raw_level
-                    )
-                )
-                print(
-                    string.format(
-                        "Initial screen type: %d (%s)",
-                        raw_screen_type,
-                        screen_name(raw_screen_type)
-                    )
-                )
-                print(
-                    string.format(
-                        "Initial lives byte: %d",
-                        lives_remaining
-                    )
-                )
-
-                write_score(0)
-
-                write_event(
-                    "game_start",
-                    0,
-                    raw_level,
-                    1,
-                    raw_screen_type,
-                    ""
-                )
+                return
             end
 
+            game_started = true
+            waiting_for_new_game = false
+            new_game_board_went_inactive = false
+
+            -- Keep one continuous session clock across every
+            -- game played during this MAME launch.
+            if not game_start_time then
+                game_start_time =
+                    current_emulated_time()
+            end
+
+            last_score = 0
+            last_valid_score = 0
+
+            active_level = raw_level
+            active_board_position = 1
+            active_screen_type = raw_screen_type
+
+            first_board_activated = true
+            board_advance_pending = false
+
+            current_lives = lives_remaining
+            lives_monitor_initialized = true
+            last_lives_byte = lives_remaining
+
+            life_loss_pending = false
+            life_loss_previous_lives = nil
+            life_loss_new_lives = nil
+
+            bonus_life_pending = false
+            bonus_previous_lives = nil
+            bonus_new_lives = nil
+            bonus_detected_elapsed = nil
+
+            event_detection_armed = true
+
+            final_death_recorded = false
+            game_over_recorded = false
+
+            life_lost_count = 0
+            board_clear_count = 0
+            bonus_life_count = 0
+
+            print("Game started!")
+            print(
+                string.format(
+                    "Initial level byte: %d",
+                    raw_level
+                )
+            )
+            print(
+                string.format(
+                    "Initial screen type: %d (%s)",
+                    raw_screen_type,
+                    screen_name(raw_screen_type)
+                )
+            )
+            print(
+                string.format(
+                    "Initial lives byte: %d",
+                    lives_remaining
+                )
+            )
+
+            write_score(0)
+
+            write_event(
+                "game_start",
+                0,
+                raw_level,
+                1,
+                raw_screen_type,
+                ""
+            )
+
+            record_board_start()
+
+            last_board_state = board_state
+            last_board_active = board_active
+            last_aux_state = aux_state
             return
         end
 
@@ -773,16 +799,29 @@ function dktracker.startplugin()
                     record_life_lost()
                     record_game_over()
 
-                    -- Return to game-start detection so another
-                    -- credit can be tracked without restarting MAME.
+                    -- Enter an explicit post-Game-Over waiting
+                    -- state. The old board must first become fully
+                    -- inactive before a later activation can start
+                    -- the next game.
                     game_started = false
-                    saw_nonzero_score = false
+                    waiting_for_new_game = true
+                    new_game_board_went_inactive =
+                        board_active == 0x00
 
                     final_death_recorded = true
                     life_loss_pending = false
 
                     life_loss_previous_lives = nil
                     life_loss_new_lives = nil
+
+                    -- Do not let the remainder of this frame process
+                    -- the lives reset or board teardown as part of
+                    -- the finished game.
+                    last_board_state = board_state
+                    last_board_active = board_active
+                    last_aux_state = aux_state
+                    last_lives_byte = lives_remaining
+                    return
                 else
                     life_loss_pending = true
                 end
