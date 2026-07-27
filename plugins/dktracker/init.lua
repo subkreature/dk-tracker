@@ -1,6 +1,6 @@
 local exports = {
     name = "dktracker",
-    version = "0.1.7",
+    version = "0.1.8",
     description = "Donkey Kong Tracker",
     license = "MIT",
     author = { name = "Nick" }
@@ -626,11 +626,17 @@ function dktracker.startplugin()
             if saw_nonzero_score and score == 0 then
 
                 game_started = true
-                game_start_time =
-                    current_emulated_time()
+
+                -- Keep one continuous session clock across every
+                -- game played during this MAME launch.
+                if not game_start_time then
+                    game_start_time =
+                        current_emulated_time()
+                end
 
                 last_score = 0
                 last_valid_score = 0
+                saw_nonzero_score = false
 
                 last_board_state =
                     board_state
@@ -641,13 +647,36 @@ function dktracker.startplugin()
                 last_aux_state =
                     aux_state
 
+                last_lives_byte = nil
+
+                active_level = 0
+                active_board_position = 0
+                active_screen_type = 0
+
+                first_board_activated = false
+                board_advance_pending = false
+
                 current_lives =
                     lives_remaining
+                lives_monitor_initialized = false
 
-                -- Startup board-state transitions must not
-                -- be classified until a real board activates.
+                life_loss_pending = false
+                life_loss_previous_lives = nil
+                life_loss_new_lives = nil
+
+                bonus_life_pending = false
+                bonus_previous_lives = nil
+                bonus_new_lives = nil
+                bonus_detected_elapsed = nil
+
                 event_detection_armed = false
-                board_advance_pending = false
+
+                final_death_recorded = false
+                game_over_recorded = false
+
+                life_lost_count = 0
+                board_clear_count = 0
+                bonus_life_count = 0
 
                 print("Game started!")
                 print(
@@ -743,6 +772,11 @@ function dktracker.startplugin()
                 if lives_remaining == 0 then
                     record_life_lost()
                     record_game_over()
+
+                    -- Return to game-start detection so another
+                    -- credit can be tracked without restarting MAME.
+                    game_started = false
+                    saw_nonzero_score = false
 
                     final_death_recorded = true
                     life_loss_pending = false

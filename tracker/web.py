@@ -3,6 +3,12 @@ from tracker.live import (
     count_live_events,
     get_lives_remaining,
 )
+from tracker.personal_best import (
+    build_personal_bests,
+)
+from tracker.session_page import (
+    build_session_page,
+)
 from tracker.session_detail import (
     build_session_detail,
 )
@@ -20,6 +26,7 @@ from pathlib import Path
 import threading
 import time
 import webbrowser
+from urllib.parse import parse_qs, urlparse
 
 from launcher import (
     LaunchResult,
@@ -506,23 +513,21 @@ def get_live_score(
     score_rows: list[dict[str, str]],
 ) -> int:
     """
-    Return the highest valid score recorded so far.
+    Return the newest valid score recorded so far.
+
+    A tracked MAME session may contain multiple games, so
+    the current score can legitimately reset to zero.
     """
 
-    scores: list[int] = []
-
-    for row in score_rows:
+    for row in reversed(score_rows):
         score = parse_nonnegative_int(
             row.get("score")
         )
 
         if score is not None:
-            scores.append(score)
+            return score
 
-    return max(
-        scores,
-        default=0,
-    )
+    return 0
 
 
 def format_board_name(
@@ -838,6 +843,24 @@ def load_dashboard_data() -> tuple[
         career_summary,
         latest_session_summary,
         latest_session.folder.name,
+    )
+
+
+def get_compatible_session_names() -> list[str]:
+    """
+    Return compatible tracked-session names, newest first.
+    """
+
+    career = load_career(
+        SESSIONS_FOLDER
+    )
+
+    return sorted(
+        (
+            session.folder.name
+            for session in career.sessions
+        ),
+        reverse=True,
     )
 
 
@@ -1213,6 +1236,23 @@ def build_dashboard_html() -> str:
             color: var(--primary-text);
         }}
 
+
+        .session-link {{
+            display: inline-block;
+            margin-top: 18px;
+            padding: 12px 18px;
+            border: 1px solid var(--accent);
+            border-radius: 10px;
+            background: var(--card-background);
+            color: var(--accent);
+            font-weight: 700;
+            text-decoration: none;
+        }}
+
+        .session-link:hover {{
+            background: var(--button-hover);
+        }}
+
         @media (max-width: 600px) {{
             body {{
                 padding: 20px;
@@ -1499,6 +1539,12 @@ def build_dashboard_html() -> str:
                 </p>
             </article>
         </section>
+
+        <div style="text-align:center; margin-top:18px;">
+            <a class="session-link" href="/session">
+                View Latest Session
+            </a>
+        </div>
 
         <div class="status-panel">
             <strong>Dashboard active.</strong>
@@ -2169,19 +2215,57 @@ class DashboardRequestHandler(
 
     def serve_session(self) -> None:
         """
-        Serve details for the latest session.
+        Serve details for the requested or latest session.
         """
 
         try:
-            (
-                _career_summary,
-                _latest_session_summary,
-                latest_session_name,
-            ) = load_dashboard_data()
+            session_names = (
+                get_compatible_session_names()
+            )
+
+            if not session_names:
+                raise ValueError(
+                    "No compatible sessions are available."
+                )
+
+            parsed_url = urlparse(self.path)
+            query_values = parse_qs(
+                parsed_url.query
+            )
+
+            requested_names = query_values.get(
+                "name",
+                [],
+            )
+
+            if requested_names:
+                session_name = requested_names[0]
+
+                if session_name not in session_names:
+                    raise ValueError(
+                        "The requested session does not "
+                        "exist or is not compatible."
+                    )
+            else:
+                session_name = session_names[0]
 
             session_detail = build_session_detail(
+                SESSIONS_FOLDER / session_name
+            )
+
+            career = load_career(
                 SESSIONS_FOLDER
-                / latest_session_name
+            )
+
+            career_summary = analyze_career(
+                career
+            )
+
+            session_detail["personal_bests"] = (
+                build_personal_bests(
+                    session_detail,
+                    career_summary.high_score,
+                )
             )
 
         except (
@@ -2195,82 +2279,19 @@ class DashboardRequestHandler(
                     title="Session data unavailable",
                     message=(
                         "DK Tracker could not load "
-                        "the latest session."
+                        "the requested session."
                     ),
                     details=str(error),
                 )
             )
             return
 
-        duration_seconds = int(
-            session_detail["duration_seconds"]
-        )
-
-        duration_minutes, duration_remainder = divmod(
-            duration_seconds,
-            60,
-        )
-
         self.send_html(
-            f"""\
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1"
-    >
-
-    <title>Session Details</title>
-</head>
-<body>
-    <main>
-        <h1>Session Details</h1>
-
-        <p>
-            Session:
-            {escape(latest_session_name)}
-        </p>
-
-        <p>
-            Final Score:
-            {session_detail["final_score"]:,}
-        </p>
-
-        <p>
-            Duration:
-            {duration_minutes}:{duration_remainder:02d}
-        </p>
-
-        <p>
-            Highest Board:
-            {escape(str(session_detail["highest_board"]))}
-        </p>
-
-        <p>
-            Lives Lost:
-            {session_detail["lives_lost"]}
-        </p>
-
-        <p>
-            Bonus Lives:
-            {session_detail["bonus_lives"]}
-        </p>
-
-        <p>
-            Boards Cleared:
-            {session_detail["boards_cleared"]}
-        </p>
-
-        <p>
-            <a href="/">Return to dashboard</a>
-        </p>
-    </main>
-</body>
-</html>
-"""
+            build_session_page(
+                session_name,
+                session_detail,
+                session_names,
+            )
         )
 
     def serve_status(self) -> None:
@@ -2504,3 +2525,4 @@ def run_dashboard() -> None:
     finally:
         server.server_close()
         print("Dashboard stopped.")
+
