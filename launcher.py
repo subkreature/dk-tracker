@@ -2,6 +2,7 @@
 
 import argparse
 import csv
+import shutil
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,20 @@ MAME_EXECUTABLE = MAME_FOLDER / "mame"
 
 ROM_NAME = "dkong"
 PLUGIN_NAME = "dktracker"
+
+PROJECT_PLUGIN = (
+    PROJECT_FOLDER
+    / "plugins"
+    / PLUGIN_NAME
+    / "init.lua"
+)
+
+MAME_PLUGIN = (
+    MAME_FOLDER
+    / "plugins"
+    / PLUGIN_NAME
+    / "init.lua"
+)
 
 
 # ---------------------------------------------------------
@@ -295,6 +310,17 @@ def print_tracker_storage() -> None:
     print()
 
 
+
+def sync_plugin() -> None:
+    """Copy the latest tracker plugin into the MAME plugins folder."""
+
+    if not PROJECT_PLUGIN.exists():
+        raise FileNotFoundError(f"Tracker plugin not found:\n{PROJECT_PLUGIN}")
+
+    MAME_PLUGIN.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(PROJECT_PLUGIN, MAME_PLUGIN)
+    print("Tracker plugin synchronized.")
+
 def build_mame_command(
     tracking_enabled: bool,
 ) -> list[str]:
@@ -460,6 +486,7 @@ def launch_tracked_game() -> LaunchResult:
     print()
 
     prepare_data_folders()
+    sync_plugin()
     print_tracker_storage()
 
     start_time = datetime.now()
