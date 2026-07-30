@@ -3,6 +3,13 @@ from tracker.live import (
     count_live_events,
     get_lives_remaining,
 )
+from tracker.config import (
+    load_config,
+    validate_config,
+)
+from tracker.setup_page import (
+    build_setup_page,
+)
 from tracker.personal_best import (
     build_personal_bests,
 )
@@ -2288,8 +2295,17 @@ class DashboardRequestHandler(
 
     def serve_dashboard(self) -> None:
         """
-        Serve the main dashboard.
+        Serve setup or the main dashboard.
         """
+
+        config = load_config()
+        problems = validate_config(config)
+
+        if problems:
+            self.send_html(
+                build_setup_page(problems)
+            )
+            return
 
         self.send_html(
             build_dashboard_html()
