@@ -342,10 +342,38 @@ def sync_plugin() -> None:
     """Copy the latest tracker plugin into the MAME plugins folder."""
 
     if not PROJECT_PLUGIN.exists():
-        raise FileNotFoundError(f"Tracker plugin not found:\n{PROJECT_PLUGIN}")
+        raise FileNotFoundError(
+            "Tracker plugin not found:\n"
+            f"{PROJECT_PLUGIN}"
+        )
 
-    MAME_PLUGIN.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(PROJECT_PLUGIN, MAME_PLUGIN)
+    mame_plugin = (
+        MAME_FOLDER
+        / "plugins"
+        / PLUGIN_NAME
+        / "init.lua"
+    )
+
+    mame_plugin.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if (
+        PROJECT_PLUGIN.resolve()
+        == mame_plugin.resolve()
+    ):
+        print(
+            "Tracker plugin is already "
+            "in the MAME plugins folder."
+        )
+        return
+
+    shutil.copy2(
+        PROJECT_PLUGIN,
+        mame_plugin,
+    )
+
     print("Tracker plugin synchronized.")
 
 def build_mame_command(
@@ -698,7 +726,25 @@ def launch_game(
 
     This is the function the dashboard will call.
     """
+    global SAVED_CONFIG
+    global MAME_EXECUTABLE
+    global MAME_FOLDER
+    global ROM_FILE
+    global ROM_FOLDER
 
+    SAVED_CONFIG = load_config()
+
+    MAME_EXECUTABLE = Path(
+        SAVED_CONFIG.mame_executable
+    )
+
+    MAME_FOLDER = MAME_EXECUTABLE.parent
+
+    ROM_FILE = Path(
+        SAVED_CONFIG.rom_file
+    )
+
+    ROM_FOLDER = ROM_FILE.parent
     validate_mame()
 
     if tracking_enabled:

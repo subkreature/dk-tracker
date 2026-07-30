@@ -138,7 +138,243 @@ def build_setup_page(
             <strong>dkong.zip</strong> ROM before it can
             launch Donkey Kong.
         </p>
+
+        <button
+            id="choose-mame-button"
+            type="button"
+            style="
+                width: 100%;
+                margin-top: 24px;
+                padding: 14px 18px;
+                border: 1px solid var(--accent);
+                border-radius: 10px;
+                background: var(--card-background);
+                color: var(--accent);
+                cursor: pointer;
+                font: inherit;
+                font-weight: 700;
+            "
+        >
+            Choose MAME Executable…
+        </button>
+
+        <p
+            id="mame-path"
+            style="
+                margin: 14px 0 0;
+                color: var(--secondary-text);
+                overflow-wrap: anywhere;
+            "
+        >
+            No MAME executable selected.
+        </p>
+
+        <button
+            id="choose-rom-button"
+            type="button"
+            style="
+                width: 100%;
+                margin-top: 24px;
+                padding: 14px 18px;
+                border: 1px solid var(--accent);
+                border-radius: 10px;
+                background: var(--card-background);
+                color: var(--accent);
+                cursor: pointer;
+                font: inherit;
+                font-weight: 700;
+            "
+        >
+            Choose dkong.zip…
+        </button>
+
+        <p
+            id="rom-path"
+            style="
+                margin: 14px 0 0;
+                color: var(--secondary-text);
+                overflow-wrap: anywhere;
+            "
+        >
+            No Donkey Kong ROM selected.
+        </p>
+
+        <button
+            id="save-setup-button"
+            type="button"
+            disabled
+            style="
+                width: 100%;
+                margin-top: 28px;
+                padding: 14px 18px;
+                border: 0;
+                border-radius: 10px;
+                background: var(--accent);
+                color: #111111;
+                cursor: pointer;
+                font: inherit;
+                font-weight: 800;
+            "
+        >
+            Save and Continue
+        </button>
+
+        <p
+            id="setup-status"
+            style="
+                min-height: 24px;
+                margin: 14px 0 0;
+                color: var(--secondary-text);
+                overflow-wrap: anywhere;
+            "
+        ></p>
     </main>
+
+    <script>
+        const chooseMameButton =
+            document.getElementById(
+                "choose-mame-button"
+            );
+
+        const mamePath =
+            document.getElementById(
+                "mame-path"
+            );
+
+        const chooseRomButton =
+            document.getElementById(
+                "choose-rom-button"
+            );
+
+        const romPath =
+            document.getElementById(
+                "rom-path"
+            );
+
+        const saveSetupButton =
+            document.getElementById(
+                "save-setup-button"
+            );
+
+        const setupStatus =
+            document.getElementById(
+                "setup-status"
+            );
+
+        let selectedMamePath = "";
+        let selectedRomPath = "";
+
+        function updateSaveButton() {{
+            saveSetupButton.disabled = !(
+                selectedMamePath
+                && selectedRomPath
+            );
+        }}
+
+        chooseMameButton.addEventListener(
+            "click",
+            async () => {{
+                chooseMameButton.disabled = true;
+
+                try {{
+                    const selectedPath =
+                        await window.pywebview.api
+                            .choose_mame_executable();
+
+                    if (selectedPath) {{
+                        selectedMamePath =
+                            selectedPath;
+
+                        mamePath.textContent =
+                            selectedPath;
+
+                        setupStatus.textContent = "";
+                        updateSaveButton();
+                    }}
+                }} catch (error) {{
+                    mamePath.textContent = (
+                        "Could not open the MAME "
+                        + "file picker."
+                    );
+
+                    console.error(error);
+                }} finally {{
+                    chooseMameButton.disabled = false;
+                }}
+            }}
+        );
+
+        chooseRomButton.addEventListener(
+            "click",
+            async () => {{
+                chooseRomButton.disabled = true;
+
+                try {{
+                    const selectedPath =
+                        await window.pywebview.api
+                            .choose_rom_file();
+
+                    if (selectedPath) {{
+                        selectedRomPath =
+                            selectedPath;
+
+                        romPath.textContent =
+                            selectedPath;
+
+                        setupStatus.textContent = "";
+                        updateSaveButton();
+                    }}
+                }} catch (error) {{
+                    romPath.textContent = (
+                        "Could not open the ROM "
+                        + "file picker."
+                    );
+
+                    console.error(error);
+                }} finally {{
+                    chooseRomButton.disabled = false;
+                }}
+            }}
+        );
+
+        saveSetupButton.addEventListener(
+            "click",
+            async () => {{
+                saveSetupButton.disabled = true;
+                setupStatus.textContent =
+                    "Validating configuration…";
+
+                try {{
+                    const result =
+                        await window.pywebview.api
+                            .save_setup(
+                                selectedMamePath,
+                                selectedRomPath
+                            );
+
+                    if (result.success) {{
+                        setupStatus.textContent =
+                            "Configuration saved.";
+
+                        window.location.reload();
+                        return;
+                    }}
+
+                    setupStatus.textContent =
+                        result.problems.join(" ");
+                }} catch (error) {{
+                    setupStatus.textContent = (
+                        "Could not save the "
+                        + "configuration."
+                    );
+
+                    console.error(error);
+                }} finally {{
+                    updateSaveButton();
+                }}
+            }}
+        );
+    </script>
 </body>
 </html>
 """
