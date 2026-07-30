@@ -810,9 +810,11 @@ def load_dashboard_data() -> tuple[
     CareerSummary,
     SessionSummary,
     str,
+    str,
 ]:
     """
-    Load career data and the latest compatible session.
+    Load career data, the latest compatible session,
+    and the date the career high was first achieved.
     """
 
     career = load_career(
@@ -829,20 +831,63 @@ def load_dashboard_data() -> tuple[
             "for the dashboard."
         )
 
-    latest_session = max(
-        career.sessions,
+    session_summaries = [
+        (
+            session,
+            analyze_session(session),
+        )
+        for session in career.sessions
+    ]
+
+    latest_session, latest_session_summary = max(
+        session_summaries,
+        key=lambda item:
+            item[0].folder.name,
+    )
+
+    high_score_sessions = [
+        session
+        for session, summary in session_summaries
+        if summary.final_score
+        == career_summary.high_score
+    ]
+
+    first_high_score_session = min(
+        high_score_sessions,
         key=lambda session:
             session.folder.name,
     )
 
-    latest_session_summary = analyze_session(
-        latest_session
-    )
+    try:
+        achieved_datetime = datetime.strptime(
+            first_high_score_session.folder.name,
+            "%Y-%m-%d_%H-%M-%S",
+        )
+
+        achieved_hour = (
+            achieved_datetime
+            .strftime("%I")
+            .lstrip("0")
+        )
+
+        career_high_achieved = (
+            achieved_datetime.strftime("%B ")
+            + str(achieved_datetime.day)
+            + achieved_datetime.strftime(", %Y at ")
+            + achieved_hour
+            + achieved_datetime.strftime(":%M %p")
+        )
+
+    except ValueError:
+        career_high_achieved = (
+            first_high_score_session.folder.name
+        )
 
     return (
         career_summary,
         latest_session_summary,
         latest_session.folder.name,
+        career_high_achieved,
     )
 
 
@@ -874,10 +919,11 @@ def build_dashboard_html() -> str:
     """
 
     try:
-        (
+                (
             career_summary,
             latest_session_summary,
             latest_session_name,
+            career_high_achieved,
         ) = load_dashboard_data()
 
     except (
@@ -1200,16 +1246,34 @@ def build_dashboard_html() -> str:
             text-transform: uppercase;
         }}
 
-        .metric-value {{
+                       .metric-value {{
             margin: 16px 0;
             color: var(--primary-text);
             font-size: clamp(
-                2.3rem,
-                7vw,
-                4rem
+                2rem,
+                3.6vw,
+                3.1rem
             );
             font-weight: 700;
             line-height: 1;
+            letter-spacing: -0.035em;
+            white-space: nowrap;
+        }}
+
+        .metric-value.score-large {{
+            font-size: clamp(
+                1.9rem,
+                3.3vw,
+                2.8rem
+            );
+        }}
+
+        .metric-value.score-extra-large {{
+            font-size: clamp(
+                1.7rem,
+                3vw,
+                2.5rem
+            );
         }}
 
         .metric-detail {{
@@ -1485,7 +1549,13 @@ def build_dashboard_html() -> str:
                     Last Score
                 </p>
 
-                <p class="metric-value">
+                            <p class="metric-value {
+                    "score-extra-large"
+                    if latest_session_summary.final_score >= 1_000_000
+                    else "score-large"
+                    if latest_session_summary.final_score >= 100_000
+                    else ""
+                }">
                     {latest_session_summary.final_score:,}
                 </p>
 
@@ -1500,12 +1570,18 @@ def build_dashboard_html() -> str:
                     Career High
                 </p>
 
-                <p class="metric-value highlight">
+                                <p class="metric-value highlight {
+                    "score-extra-large"
+                    if career_summary.high_score >= 1_000_000
+                    else "score-large"
+                    if career_summary.high_score >= 100_000
+                    else ""
+                }">
                     {career_summary.high_score:,}
                 </p>
 
-                <p class="metric-detail">
-                    Highest compatible tracked score
+                                <p class="metric-detail">
+                    Achieved {career_high_achieved}
                 </p>
             </article>
 
@@ -1529,7 +1605,13 @@ def build_dashboard_html() -> str:
                     Average Score
                 </p>
 
-                <p class="metric-value">
+                              <p class="metric-value {
+                    "score-extra-large"
+                    if career_summary.average_score >= 1_000_000
+                    else "score-large"
+                    if career_summary.average_score >= 100_000
+                    else ""
+                }">
                     {career_summary.average_score:,.0f}
                 </p>
 
@@ -2468,9 +2550,9 @@ def open_browser() -> None:
     timer.start()
 
 
-def run_dashboard() -> None:
+def create_dashboard_server() -> ThreadingHTTPServer:
     """
-    Start the local dashboard server.
+    Create and return the local dashboard server.
     """
 
     server_address = (
@@ -2478,11 +2560,19 @@ def run_dashboard() -> None:
         PORT,
     )
 
+    return ThreadingHTTPServer(
+        server_address,
+        DashboardRequestHandler,
+    )
+
+
+def run_dashboard() -> None:
+    """
+    Start the dashboard server and open it in a browser.
+    """
+
     try:
-        server = ThreadingHTTPServer(
-            server_address,
-            DashboardRequestHandler,
-        )
+        server = create_dashboard_server()
 
     except OSError as error:
         print(
