@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from tracker.config import load_config
+from tracker.config import (
+    load_config,
+    validate_config,
+)
 
 
 # ---------------------------------------------------------
@@ -20,24 +23,16 @@ DATA_FOLDER = PROJECT_FOLDER / "data"
 SESSIONS_FOLDER = DATA_FOLDER / "sessions"
 SESSION_HISTORY_FILE = DATA_FOLDER / "sessions.csv"
 
-DEFAULT_MAME_EXECUTABLE = Path(
-    "/Users/nick/Downloads/mame0286-x86/mame"
-)
-
 SAVED_CONFIG = load_config()
 
-MAME_EXECUTABLE = (
-    Path(SAVED_CONFIG.mame_executable)
-    if SAVED_CONFIG.mame_executable
-    else DEFAULT_MAME_EXECUTABLE
+MAME_EXECUTABLE = Path(
+    SAVED_CONFIG.mame_executable
 )
 
 MAME_FOLDER = MAME_EXECUTABLE.parent
 
-ROM_FILE = (
-    Path(SAVED_CONFIG.rom_file)
-    if SAVED_CONFIG.rom_file
-    else MAME_FOLDER / "roms" / "dkong.zip"
+ROM_FILE = Path(
+    SAVED_CONFIG.rom_file
 )
 
 ROM_FOLDER = ROM_FILE.parent
@@ -283,12 +278,23 @@ def get_board_summary(
 
 
 def validate_mame() -> None:
-    """Confirm that the configured MAME executable exists."""
+    """
+    Confirm that the saved MAME and ROM configuration is valid.
+    """
 
-    if not MAME_EXECUTABLE.exists():
+    problems = validate_config(
+        SAVED_CONFIG
+    )
+
+    if problems:
+        details = "\n".join(
+            f"- {problem}"
+            for problem in problems
+        )
+
         raise FileNotFoundError(
-            f"MAME executable was not found at:\n"
-            f"{MAME_EXECUTABLE}"
+            "DK Tracker setup is incomplete:\n"
+            f"{details}"
         )
 
 
