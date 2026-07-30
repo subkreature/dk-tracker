@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from tracker.config import load_config
+
 
 # ---------------------------------------------------------
 # Project configuration
@@ -18,8 +20,27 @@ DATA_FOLDER = PROJECT_FOLDER / "data"
 SESSIONS_FOLDER = DATA_FOLDER / "sessions"
 SESSION_HISTORY_FILE = DATA_FOLDER / "sessions.csv"
 
-MAME_FOLDER = Path("/Users/nick/Downloads/mame0286-x86")
-MAME_EXECUTABLE = MAME_FOLDER / "mame"
+DEFAULT_MAME_EXECUTABLE = Path(
+    "/Users/nick/Downloads/mame0286-x86/mame"
+)
+
+SAVED_CONFIG = load_config()
+
+MAME_EXECUTABLE = (
+    Path(SAVED_CONFIG.mame_executable)
+    if SAVED_CONFIG.mame_executable
+    else DEFAULT_MAME_EXECUTABLE
+)
+
+MAME_FOLDER = MAME_EXECUTABLE.parent
+
+ROM_FILE = (
+    Path(SAVED_CONFIG.rom_file)
+    if SAVED_CONFIG.rom_file
+    else MAME_FOLDER / "roms" / "dkong.zip"
+)
+
+ROM_FOLDER = ROM_FILE.parent
 
 ROM_NAME = "dkong"
 PLUGIN_NAME = "dktracker"
@@ -327,8 +348,10 @@ def build_mame_command(
     """Build the command used to launch Donkey Kong."""
 
     command = [
-        "./mame",
+        str(MAME_EXECUTABLE),
         ROM_NAME,
+        "-rompath",
+        str(ROM_FOLDER),
     ]
 
     if tracking_enabled:
