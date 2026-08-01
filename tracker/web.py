@@ -4,6 +4,7 @@ from tracker.live import (
     get_lives_remaining,
 )
 from tracker.config import (
+    SESSIONS_FOLDER,
     load_config,
     validate_config,
 )
@@ -54,7 +55,6 @@ HOST = "127.0.0.1"
 PORT = 5000
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SESSIONS_FOLDER = PROJECT_ROOT / "data" / "sessions"
 
 
 # ---------------------------------------------------------

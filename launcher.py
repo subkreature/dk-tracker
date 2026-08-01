@@ -9,6 +9,9 @@ from datetime import datetime
 from pathlib import Path
 
 from tracker.config import (
+    DATA_FOLDER,
+    SESSIONS_FOLDER,
+    SESSION_HISTORY_FILE,
     load_config,
     validate_config,
 )
@@ -19,9 +22,7 @@ from tracker.config import (
 # ---------------------------------------------------------
 
 PROJECT_FOLDER = Path(__file__).resolve().parent
-DATA_FOLDER = PROJECT_FOLDER / "data"
-SESSIONS_FOLDER = DATA_FOLDER / "sessions"
-SESSION_HISTORY_FILE = DATA_FOLDER / "sessions.csv"
+
 
 SAVED_CONFIG = load_config()
 

@@ -60,7 +60,9 @@ def get_user_data_folder() -> Path:
 
 USER_DATA_FOLDER = get_user_data_folder()
 CONFIG_FILE = USER_DATA_FOLDER / "config.json"
-
+DATA_FOLDER = USER_DATA_FOLDER / "data"
+SESSIONS_FOLDER = DATA_FOLDER / "sessions"
+SESSION_HISTORY_FILE = DATA_FOLDER / "sessions.csv"
 
 @dataclass(frozen=True)
 class AppConfig:
