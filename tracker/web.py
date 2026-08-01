@@ -959,7 +959,7 @@ def build_dashboard_html() -> str:
         content="width=device-width, initial-scale=1"
     >
 
-    <title>DK Tracker</title>
+    <title>Jungle Gym</title>
 
     <style>
         :root {{
@@ -972,16 +972,32 @@ def build_dashboard_html() -> str:
                 "Segoe UI",
                 sans-serif;
 
-            --page-background: #101218;
-            --panel-background: #1a1d25;
-            --card-background: #222630;
-            --card-border: #343a47;
-            --primary-text: #f7f8fa;
-            --secondary-text: #abb3c0;
-            --accent: #e8b84a;
-            --success: #62c98c;
-            --danger: #ef7b7b;
-            --button-hover: #303644;
+            --page-background: #000000;
+            --panel-background: #030003;
+            --card-background: #080008;
+            --card-border: #ec3193;
+
+            --primary-text: #fefcff;
+            --secondary-text: var(--ladder-primary);
+
+            --girder-primary: #ec3193;
+            --girder-highlight: #f057e8;
+            --girder-shadow: #8e0305;
+
+            --ladder-primary: #13f3ff;
+            --ladder-shadow: #0301dc;
+
+            --barrel-orange: #ee7511;
+            --barrel-gold: #f4ba15;
+
+            --score-yellow: #f8f919;
+            --bonus-green: #11ef11;
+            --danger-red: #e80709;
+
+            --accent: var(--score-yellow);
+            --success: var(--bonus-green);
+            --danger: var(--danger-red);
+            --button-hover: #180018;
         }}
 
         * {{
@@ -991,8 +1007,17 @@ def build_dashboard_html() -> str:
         body {{
             min-height: 100vh;
             margin: 0;
-            padding: 32px;
-            background: var(--page-background);
+            padding: clamp(
+                18px,
+                4vw,
+                40px
+            );
+            background:
+                radial-gradient(
+                    circle at top,
+                    #120000 0,
+                    var(--page-background) 360px
+                );
             color: var(--primary-text);
         }}
 
@@ -1006,23 +1031,96 @@ def build_dashboard_html() -> str:
         }}
 
         header {{
+            position: relative;
             margin-bottom: 32px;
+            padding: 28px 20px 30px;
+            overflow: hidden;
+            border: 2px solid var(--girder-primary);
+            border-radius: 10px;
+            background:            background:
+                linear-gradient(
+                    180deg,
+                    #080000,
+                    #000000
+                );
+                linear-gradient(
+                    180deg,
+                    #190607,
+                    #050000
+                );
             text-align: center;
+            box-shadow:
+                0 0 0 3px var(--girder-shadow),
+                0 0 20px rgb(236 49 147 / 0.24);
+                0 0 0 3px #250405,
+                0 0 24px rgb(232 7 9 / 0.22);
+        }}
+
+        header::before,
+        header::after {{
+            content: "";
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 8px,
+                    var(--girder-primary) 8px 16px,
+                    var(--girder-shadow) 16px 24px
+                );
+        }}
+
+        header::before {{
+            top: 0;
+            border-left:
+                14px double var(--ladder-primary);
+            border-right:
+                14px double var(--ladder-primary);
+        }}
+
+        header::after {{
+            bottom: 0;
+            border-left:
+                14px double var(--ladder-primary);
+            border-right:
+                14px double var(--ladder-primary);
         }}
 
         h1 {{
             margin: 0;
+            color: var(--girder-primary);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: clamp(
                 2.4rem,
                 8vw,
                 5rem
             );
+            font-weight: 900;
+            line-height: 0.95;
             letter-spacing: 0.08em;
+            text-shadow:
+                3px 3px 0 var(--girder-shadow),
+                0 0 18px rgb(240 87 232 / 0.32);
         }}
 
         .subtitle {{
-            margin: 8px 0 0;
-            color: var(--secondary-text);
+            margin: 12px 0 0;
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: clamp(
+                0.78rem,
+                2vw,
+                1rem
+            );
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
         }}
 
         .panel {{
@@ -1351,10 +1449,10 @@ def build_dashboard_html() -> str:
 <body>
     <main>
         <header>
-            <h1>DK TRACKER</h1>
+            <h1>JUNGLE GYM</h1>
 
             <p class="subtitle">
-                Donkey Kong performance dashboard
+                Arcade performance and training dashboard
             </p>
         </header>
 
