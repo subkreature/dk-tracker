@@ -379,8 +379,9 @@ def analyze_career(
 
     return CareerSummary(
         tracked_sessions=len(session_summaries),
-        skipped_sessions=len(
-            career.failed_sessions
+        skipped_sessions=(
+            len(career.failed_sessions)
+            + len(career.excluded_sessions)
         ),
         high_score=max(final_scores),
         average_score=mean(final_scores),

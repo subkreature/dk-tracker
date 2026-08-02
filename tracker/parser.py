@@ -281,8 +281,19 @@ def load_career(
 
     sessions: list[Session] = []
     failed_sessions: list[FailedSession] = []
+    excluded_sessions: list[Path] = []
 
     for session_folder in session_folders:
+        exclusion_marker = (
+            session_folder / ".exclude-from-career"
+        )
+
+        if exclusion_marker.is_file():
+            excluded_sessions.append(
+                session_folder
+            )
+            continue
+
         try:
             sessions.append(
                 load_session(session_folder)
@@ -305,4 +316,5 @@ def load_career(
         folder=career_path,
         sessions=sessions,
         failed_sessions=failed_sessions,
+        excluded_sessions=excluded_sessions,
     )

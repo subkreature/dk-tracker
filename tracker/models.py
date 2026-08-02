@@ -95,6 +95,7 @@ class Career:
     folder: Path
     sessions: list[Session]
     failed_sessions: list[FailedSession]
+    excluded_sessions: list[Path]
 
 
 @dataclass(frozen=True)
