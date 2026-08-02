@@ -31,7 +31,7 @@ def build_setup_page(
         content="width=device-width, initial-scale=1"
     >
 
-    <title>DK Tracker Setup</title>
+    <title>Jungle Gym Setup</title>
 
     <style>
         :root {{
@@ -44,14 +44,31 @@ def build_setup_page(
                 "Segoe UI",
                 sans-serif;
 
-            --page-background: #101218;
-            --panel-background: #1a1d25;
-            --card-background: #222630;
-            --card-border: #343a47;
-            --primary-text: #f7f8fa;
-            --secondary-text: #abb3c0;
-            --accent: #e8b84a;
-            --danger: #ef7b7b;
+            --page-background: #000000;
+            --panel-background: #030003;
+            --card-background: #080008;
+            --card-border: #ec3193;
+
+            --primary-text: #fefcff;
+            --secondary-text: var(--ladder-primary);
+
+            --girder-primary: #ec3193;
+            --girder-highlight: #f057e8;
+            --girder-shadow: #8e0305;
+
+            --ladder-primary: #13f3ff;
+            --ladder-shadow: #0301dc;
+
+            --barrel-orange: #ee7511;
+            --barrel-gold: #f4ba15;
+
+            --score-yellow: #f8f919;
+            --bonus-green: #11ef11;
+            --danger-red: #e80709;
+
+            --accent: var(--score-yellow);
+            --danger: var(--danger-red);
+            --button-hover: #180018;
         }}
 
         * {{
@@ -61,64 +78,276 @@ def build_setup_page(
         body {{
             min-height: 100vh;
             margin: 0;
-            padding: 32px;
+            padding: clamp(18px, 4vw, 40px);
             display: grid;
             place-items: center;
-            background: var(--page-background);
+            background:
+                radial-gradient(
+                    circle at top,
+                    #120000 0,
+                    var(--page-background) 360px
+                );
             color: var(--primary-text);
         }}
 
         main {{
-            width: min(100%, 720px);
-            padding: 32px;
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            background: var(--panel-background);
+            position: relative;
+            width: min(100%, 760px);
+            padding:
+                clamp(30px, 5vw, 44px)
+                clamp(22px, 5vw, 40px);
+            overflow: hidden;
+            border:
+                2px solid
+                var(--girder-primary);
+            border-right:
+                12px double
+                var(--ladder-primary);
+            border-left:
+                12px double
+                var(--ladder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #080008,
+                    var(--panel-background)
+                );
+            box-shadow:
+                0 0 0 3px
+                var(--girder-shadow),
+                0 12px 34px
+                rgb(0 0 0 / 0.48);
+        }}
+
+        main::before,
+        main::after {{
+            content: "";
+            position: absolute;
+            right: 0;
+            left: 0;
+            height: 8px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 8px,
+                    var(--girder-primary) 8px 16px,
+                    var(--girder-shadow) 16px 24px
+                );
+        }}
+
+        main::before {{
+            top: 0;
+        }}
+
+        main::after {{
+            bottom: 0;
         }}
 
         h1 {{
             margin: 0;
-            color: var(--accent);
-            font-size: clamp(2rem, 7vw, 3.5rem);
-            letter-spacing: 0.06em;
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: clamp(2rem, 7vw, 3.8rem);
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: 0.08em;
             text-align: center;
+            text-shadow:
+                3px 3px 0
+                var(--barrel-orange),
+                0 0 18px
+                rgb(244 186 21 / 0.26);
         }}
 
         .subtitle {{
-            margin: 10px 0 28px;
-            color: var(--secondary-text);
+            margin: 12px 0 30px;
+            color: var(--ladder-primary);
+            font-family:
+                "Courier New",
+                monospace;
+            font-weight: 700;
+            letter-spacing: 0.06em;
             text-align: center;
+            text-transform: uppercase;
         }}
 
         .notice {{
-            padding: 20px;
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            background: var(--card-background);
+            position: relative;
+            padding: 22px 20px 20px;
+            overflow: hidden;
+            border:
+                1px solid
+                var(--girder-primary);
+            border-radius: 7px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #0b000b,
+                    var(--card-background)
+                );
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(240 87 232 / 0.08),
+                0 8px 22px
+                rgb(0 0 0 / 0.34);
+        }}
+
+        .notice::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            height: 5px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 6px,
+                    var(--girder-primary) 6px 12px,
+                    var(--girder-shadow) 12px 18px
+                );
         }}
 
         .notice h2 {{
-            margin-top: 0;
+            margin: 0 0 14px;
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 1.15rem;
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
         }}
 
         .problems {{
             margin-bottom: 0;
             padding-left: 22px;
-            color: var(--danger);
+            color: var(--danger-red);
         }}
 
         .instructions {{
             margin: 24px 0 0;
-            color: var(--secondary-text);
+            color: var(--ladder-primary);
             line-height: 1.6;
+        }}
+
+        .instructions strong {{
+            color: var(--score-yellow);
+            font-family:
+                "Courier New",
+                monospace;
+        }}
+
+        .setup-button {{
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 7px;
+            font:
+                700 1rem
+                "Courier New",
+                monospace;
+            letter-spacing: 0.03em;
+            cursor: pointer;
+            transition:
+                border-color 120ms ease,
+                background 120ms ease,
+                color 120ms ease,
+                opacity 120ms ease,
+                transform 120ms ease;
+        }}
+
+        .setup-button:hover:not(:disabled) {{
+            transform: translateY(-1px);
+        }}
+
+        .setup-button:focus-visible {{
+            outline:
+                2px solid
+                var(--ladder-primary);
+            outline-offset: 3px;
+        }}
+
+        .file-picker-button {{
+            margin-top: 24px;
+            border:
+                1px solid
+                var(--score-yellow);
+            background: var(--card-background);
+            color: var(--barrel-gold);
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(248 249 25 / 0.06);
+        }}
+
+        .file-picker-button:hover:not(:disabled) {{
+            background: var(--button-hover);
+            color: var(--score-yellow);
+        }}
+
+        .selected-path {{
+            margin: 14px 0 0;
+            overflow-wrap: anywhere;
+            color: var(--ladder-primary);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 0.86rem;
+            opacity: 0.86;
+        }}
+
+        .save-setup-button {{
+            margin-top: 28px;
+            border:
+                1px solid
+                var(--score-yellow);
+            background: var(--barrel-gold);
+            color: #000000;
+            font-weight: 900;
+            box-shadow:
+                inset 0 -3px 0
+                var(--barrel-orange),
+                0 0 12px
+                rgb(248 249 25 / 0.16);
+        }}
+
+        .save-setup-button:hover:not(:disabled) {{
+            background: var(--score-yellow);
+        }}
+
+        .setup-button:disabled {{
+            border-color:
+                rgb(236 49 147 / 0.36);
+            background: #090009;
+            color:
+                rgb(254 252 255 / 0.38);
+            box-shadow: none;
+            cursor: not-allowed;
+            opacity: 0.72;
+        }}
+
+        .setup-status {{
+            min-height: 24px;
+            margin: 14px 0 0;
+            overflow-wrap: anywhere;
+            color: var(--ladder-primary);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 0.86rem;
         }}
     </style>
 </head>
 
 <body>
     <main>
-        <h1>DK TRACKER</h1>
+        <h1>JUNGLE GYM</h1>
 
         <p class="subtitle">
             First-run setup
@@ -133,7 +362,7 @@ def build_setup_page(
         </section>
 
         <p class="instructions">
-            DK Tracker needs the location of your MAME
+            Jungle Gym needs the location of your MAME
             executable and your existing
             <strong>dkong.zip</strong> ROM before it can
             launch Donkey Kong.
@@ -141,92 +370,46 @@ def build_setup_page(
 
         <button
             id="choose-mame-button"
+            class="setup-button file-picker-button"
             type="button"
-            style="
-                width: 100%;
-                margin-top: 24px;
-                padding: 14px 18px;
-                border: 1px solid var(--accent);
-                border-radius: 10px;
-                background: var(--card-background);
-                color: var(--accent);
-                cursor: pointer;
-                font: inherit;
-                font-weight: 700;
-            "
         >
             Choose MAME Executable…
         </button>
 
         <p
             id="mame-path"
-            style="
-                margin: 14px 0 0;
-                color: var(--secondary-text);
-                overflow-wrap: anywhere;
-            "
+            class="selected-path"
         >
             No MAME executable selected.
         </p>
 
         <button
             id="choose-rom-button"
+            class="setup-button file-picker-button"
             type="button"
-            style="
-                width: 100%;
-                margin-top: 24px;
-                padding: 14px 18px;
-                border: 1px solid var(--accent);
-                border-radius: 10px;
-                background: var(--card-background);
-                color: var(--accent);
-                cursor: pointer;
-                font: inherit;
-                font-weight: 700;
-            "
         >
             Choose dkong.zip…
         </button>
 
         <p
             id="rom-path"
-            style="
-                margin: 14px 0 0;
-                color: var(--secondary-text);
-                overflow-wrap: anywhere;
-            "
+            class="selected-path"
         >
             No Donkey Kong ROM selected.
         </p>
 
         <button
             id="save-setup-button"
+            class="setup-button save-setup-button"
             type="button"
             disabled
-            style="
-                width: 100%;
-                margin-top: 28px;
-                padding: 14px 18px;
-                border: 0;
-                border-radius: 10px;
-                background: var(--accent);
-                color: #111111;
-                cursor: pointer;
-                font: inherit;
-                font-weight: 800;
-            "
         >
             Save and Continue
         </button>
 
         <p
             id="setup-status"
-            style="
-                min-height: 24px;
-                margin: 14px 0 0;
-                color: var(--secondary-text);
-                overflow-wrap: anywhere;
-            "
+            class="setup-status"
         ></p>
     </main>
 

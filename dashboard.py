@@ -142,7 +142,7 @@ def main() -> None:
 
     except OSError as error:
         print(
-            "Could not start DK Tracker "
+            "Could not start Jungle Gym "
             f"dashboard on port {PORT}."
         )
         print(error)
@@ -162,7 +162,7 @@ def main() -> None:
     )
 
     print("===================================")
-    print(" DK Tracker")
+    print(" Jungle Gym")
     print("===================================")
     print()
     print(
@@ -175,7 +175,7 @@ def main() -> None:
     app_api = AppApi()
     try:
         window = webview.create_window(
-            "DK Tracker",
+            "Jungle Gym",
             dashboard_url,
             width=1100,
             height=850,
@@ -184,7 +184,14 @@ def main() -> None:
         )
 
         app_api.set_window(window)
-
+        window = webview.create_window(
+            "Jungle Gym",
+            dashboard_url,
+            width=1100,
+            height=850,
+            min_size=(800, 650),
+            js_api=app_api,
+        )
         webview.start()
 
     finally:

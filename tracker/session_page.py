@@ -161,14 +161,32 @@ def build_session_page(
                 "Segoe UI",
                 sans-serif;
 
-            --page-background: #101218;
-            --panel-background: #1a1d25;
-            --card-background: #222630;
-            --card-border: #343a47;
-            --primary-text: #f7f8fa;
-            --secondary-text: #abb3c0;
-            --accent: #e8b84a;
-            --button-hover: #303644;
+            --page-background: #000000;
+            --panel-background: #030003;
+            --card-background: #080008;
+            --card-border: #ec3193;
+
+            --primary-text: #fefcff;
+            --secondary-text: var(--ladder-primary);
+
+            --girder-primary: #ec3193;
+            --girder-highlight: #f057e8;
+            --girder-shadow: #8e0305;
+
+            --ladder-primary: #13f3ff;
+            --ladder-shadow: #0301dc;
+
+            --barrel-orange: #ee7511;
+            --barrel-gold: #f4ba15;
+
+            --score-yellow: #f8f919;
+            --bonus-green: #11ef11;
+            --danger-red: #e80709;
+
+            --accent: var(--score-yellow);
+            --success: var(--bonus-green);
+            --danger: var(--danger-red);
+            --button-hover: #180018;
         }
 
         * {
@@ -178,29 +196,95 @@ def build_session_page(
         body {
             min-height: 100vh;
             margin: 0;
-            padding: 32px;
-            background: var(--page-background);
+            padding: clamp(18px, 4vw, 40px);
+            background:
+                radial-gradient(
+                    circle at top,
+                    #120000 0,
+                    var(--page-background) 360px
+                );
             color: var(--primary-text);
         }
 
         main {
-            width: min(100%, 1000px);
+            width: min(100%, 1100px);
             margin: 0 auto;
         }
 
         header {
+            position: relative;
             margin-bottom: 32px;
+            padding:
+                clamp(24px, 4vw, 38px)
+                clamp(18px, 4vw, 34px);
+            overflow: hidden;
+            border:
+                2px solid
+                var(--girder-primary);
+            border-right:
+                14px double
+                var(--ladder-primary);
+            border-left:
+                14px double
+                var(--ladder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #080008,
+                    var(--panel-background)
+                );
+            box-shadow:
+                0 0 0 3px
+                var(--girder-shadow),
+                0 10px 30px
+                rgb(0 0 0 / 0.45);
             text-align: center;
+        }
+
+        header::before,
+        header::after {
+            content: "";
+            position: absolute;
+            right: 0;
+            left: 0;
+            height: 8px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 8px,
+                    var(--girder-primary) 8px 16px,
+                    var(--girder-shadow) 16px 24px
+                );
+        }
+
+        header::before {
+            top: 0;
+        }
+
+        header::after {
+            bottom: 0;
         }
 
         h1 {
             margin: 0 0 12px;
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: clamp(
                 2.2rem,
                 7vw,
                 4.5rem
             );
-            letter-spacing: 0.06em;
+            font-weight: 900;
+            line-height: 0.95;
+            letter-spacing: 0.08em;
+            text-shadow:
+                3px 3px 0
+                var(--barrel-orange),
+                0 0 18px
+                rgb(244 186 21 / 0.26);
         }
 
         .session-name {
@@ -243,30 +327,68 @@ def build_session_page(
         }
 
         .achievement-banner {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 20px;
             margin-bottom: 24px;
-            padding: 18px 22px;
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
-            background: var(--panel-background);
+            padding: 20px 24px;
+            overflow: hidden;
+            border:
+                2px solid
+                var(--girder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #080008,
+                    var(--panel-background)
+                );
+            box-shadow:
+                0 0 0 3px
+                var(--girder-shadow),
+                0 10px 24px
+                rgb(0 0 0 / 0.38);
+        }
+
+        .achievement-banner::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            height: 6px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 6px,
+                    var(--girder-primary) 6px 12px,
+                    var(--girder-shadow) 12px 18px
+                );
         }
 
         .achievement-banner.personal-best {
-            border-color: var(--accent);
+            border-color: var(--score-yellow);
             background:
                 linear-gradient(
                     135deg,
-                    rgba(232, 184, 74, 0.18),
+                    rgb(244 186 21 / 0.12),
                     var(--panel-background)
                 );
+            box-shadow:
+                0 0 0 3px
+                var(--barrel-orange),
+                0 10px 24px
+                rgb(0 0 0 / 0.38);
         }
 
         .achievement-label {
             margin: 0;
-            color: var(--primary-text);
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 1rem;
             font-weight: 900;
             letter-spacing: 0.08em;
@@ -275,19 +397,28 @@ def build_session_page(
 
         .achievement-banner.personal-best
         .achievement-label {
-            color: var(--accent);
+            color: var(--score-yellow);
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
         }
 
         .achievement-detail {
-            margin: 4px 0 0;
-            color: var(--secondary-text);
+            margin: 5px 0 0;
+            color: var(--ladder-primary);
         }
 
         .achievement-score {
             flex: 0 0 auto;
-            color: var(--accent);
+            color: var(--score-yellow);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: clamp(1.7rem, 5vw, 2.4rem);
             font-weight: 900;
+            text-shadow:
+                2px 2px 0
+                var(--barrel-orange);
         }
 
         .summary-grid {
@@ -302,16 +433,49 @@ def build_session_page(
         }
 
         .summary-card {
+            position: relative;
             min-height: 130px;
-            padding: 22px;
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
-            background: var(--card-background);
+            padding: 24px 22px 22px;
+            overflow: hidden;
+            border:
+                1px solid
+                var(--girder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #0b000b,
+                    var(--card-background)
+                );
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(240 87 232 / 0.1),
+                0 8px 22px
+                rgb(0 0 0 / 0.34);
+        }
+
+        .summary-card::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            height: 5px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 6px,
+                    var(--girder-primary) 6px 12px,
+                    var(--girder-shadow) 12px 18px
+                );
         }
 
         .summary-label {
-            margin: 0 0 12px;
-            color: var(--secondary-text);
+            margin: 0 0 14px;
+            color: var(--ladder-primary);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 0.85rem;
             font-weight: 700;
             letter-spacing: 0.08em;
@@ -321,38 +485,116 @@ def build_session_page(
         .summary-value {
             margin: 0;
             color: var(--primary-text);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 2rem;
-            font-weight: 800;
+            font-weight: 900;
+            text-shadow:
+                1px 1px 0
+                var(--girder-shadow);
         }
 
         .summary-card.primary {
-            border-color: var(--accent);
+            border-color: var(--score-yellow);
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(248 249 25 / 0.12),
+                0 8px 22px
+                rgb(0 0 0 / 0.34);
+        }
+
+        .summary-card.primary::before {
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--score-yellow) 0 6px,
+                    var(--barrel-gold) 6px 12px,
+                    var(--barrel-orange) 12px 18px
+                );
         }
 
         .summary-card.primary .summary-value {
-            color: var(--accent);
+            color: var(--score-yellow);
             font-size: 2.5rem;
+            text-shadow:
+                2px 2px 0
+                var(--barrel-orange);
         }
 
         .splits-panel {
+            position: relative;
             margin-bottom: 32px;
-            padding: 24px;
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
-            background: var(--panel-background);
+            padding: 28px 24px 24px;
+            overflow: hidden;
+            border:
+                2px solid
+                var(--girder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #080008,
+                    var(--panel-background)
+                );
+            box-shadow:
+                0 0 0 3px
+                var(--girder-shadow),
+                0 10px 28px
+                rgb(0 0 0 / 0.4);
+        }
+
+        .splits-panel::before,
+        .splits-panel::after {
+            content: "";
+            position: absolute;
+            right: 0;
+            left: 0;
+            height: 7px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 7px,
+                    var(--girder-primary) 7px 14px,
+                    var(--girder-shadow) 14px 21px
+                );
+        }
+
+        .splits-panel::before {
+            top: 0;
+        }
+
+        .splits-panel::after {
+            bottom: 0;
         }
 
         .splits-panel h2 {
             margin: 0;
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 1.35rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
         }
 
         .splits-description {
             margin: 8px 0 20px;
-            color: var(--secondary-text);
+            color: var(--ladder-primary);
         }
 
         .split-table-wrap {
             overflow-x: auto;
+            border:
+                1px solid
+                rgb(19 243 255 / 0.24);
+            border-radius: 6px;
+            background: #030003;
         }
 
         .split-table {
@@ -363,16 +605,42 @@ def build_session_page(
         .split-table th,
         .split-table td {
             padding: 13px 12px;
-            border-bottom: 1px solid var(--card-border);
+            border-bottom:
+                1px solid
+                rgb(236 49 147 / 0.32);
             text-align: left;
             white-space: nowrap;
         }
 
         .split-table th {
-            color: var(--secondary-text);
+            background:
+                linear-gradient(
+                    180deg,
+                    #0d000d,
+                    #060006
+                );
+            color: var(--ladder-primary);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 0.78rem;
+            font-weight: 700;
             letter-spacing: 0.07em;
             text-transform: uppercase;
+        }
+
+        .split-table tbody tr {
+            transition:
+                background 120ms ease,
+                box-shadow 120ms ease;
+        }
+
+        .split-table tbody tr:hover {
+            background:
+                rgb(236 49 147 / 0.08);
+            box-shadow:
+                inset 4px 0 0
+                var(--girder-primary);
         }
 
         .split-table tbody tr:last-child td {
@@ -380,15 +648,25 @@ def build_session_page(
         }
 
         .split-board {
-            color: var(--accent);
+            color: var(--score-yellow);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 1.05rem;
             font-weight: 900;
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
         }
 
         .split-status {
             display: inline-block;
             padding: 5px 9px;
-            border-radius: 999px;
+            border: 1px solid currentColor;
+            border-radius: 4px;
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 0.75rem;
             font-weight: 800;
             letter-spacing: 0.04em;
@@ -396,43 +674,108 @@ def build_session_page(
         }
 
         .split-status.complete {
-            background: rgba(113, 213, 138, 0.16);
-            color: #71d58a;
+            background:
+                rgb(17 239 17 / 0.1);
+            color: var(--bonus-green);
         }
 
         .split-status.incomplete {
-            background: rgba(239, 106, 106, 0.16);
-            color: #ef6a6a;
+            background:
+                rgb(232 7 9 / 0.1);
+            color: var(--danger-red);
         }
 
         .split-empty {
             margin: 18px 0 0;
-            color: var(--secondary-text);
+            color: var(--ladder-primary);
         }
 
         .chart-panel {
+            position: relative;
             margin-bottom: 32px;
-            padding: 24px;
-            border: 1px solid var(--card-border);
-            border-radius: 14px;
-            background: var(--panel-background);
+            padding: 28px 24px 24px;
+            overflow: hidden;
+            border:
+                2px solid
+                var(--girder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #080008,
+                    var(--panel-background)
+                );
+            box-shadow:
+                0 0 0 3px
+                var(--girder-shadow),
+                0 10px 28px
+                rgb(0 0 0 / 0.4);
+        }
+
+        .chart-panel::before,
+        .chart-panel::after {
+            content: "";
+            position: absolute;
+            right: 0;
+            left: 0;
+            height: 7px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 7px,
+                    var(--girder-primary) 7px 14px,
+                    var(--girder-shadow) 14px 21px
+                );
+        }
+
+        .chart-panel::before {
+            top: 0;
+        }
+
+        .chart-panel::after {
+            bottom: 0;
         }
 
         .chart-panel h2 {
             margin: 0 0 20px;
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 1.35rem;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
         }
 
         .chart-container {
             position: relative;
             min-height: 360px;
+            padding: 12px;
+            border:
+                1px solid
+                rgb(19 243 255 / 0.22);
+            border-radius: 6px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #050005,
+                    #000000
+                );
+            box-shadow:
+                inset 0 0 24px
+                rgb(3 1 220 / 0.1);
         }
 
         .event-legend {
             display: flex;
             flex-wrap: wrap;
-            gap: 10px 18px;
+            gap: 10px 12px;
             margin-top: 18px;
-            color: var(--secondary-text);
+            color: var(--ladder-primary);
             font-size: 0.85rem;
         }
 
@@ -440,18 +783,25 @@ def build_session_page(
             display: inline-flex;
             align-items: center;
             gap: 7px;
-            padding: 6px 9px;
-            border: 1px solid transparent;
-            border-radius: 9px;
-            background: transparent;
-            color: var(--secondary-text);
+            padding: 7px 10px;
+            border:
+                1px solid
+                rgb(19 243 255 / 0.22);
+            border-radius: 5px;
+            background: #050005;
+            color: var(--ladder-primary);
             font: inherit;
             cursor: pointer;
+            transition:
+                border-color 120ms ease,
+                background 120ms ease,
+                color 120ms ease;
         }
 
         .event-legend-item:hover {
-            border-color: var(--card-border);
-            background: var(--card-background);
+            border-color: var(--score-yellow);
+            background: var(--button-hover);
+            color: var(--score-yellow);
         }
 
         .event-legend-item[aria-pressed="false"] {
@@ -469,42 +819,57 @@ def build_session_page(
             height: 24px;
             align-items: center;
             justify-content: center;
-            border-radius: 999px;
-            color: #101218;
+            border:
+                1px solid
+                currentColor;
+            border-radius: 4px;
+            color: #000000;
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 0.72rem;
             font-weight: 900;
             line-height: 1;
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(255 255 255 / 0.12);
         }
 
         .event-legend-marker.life-lost {
-            background: #ef6a6a;
+            background: var(--danger-red);
         }
 
         .event-legend-marker.bonus-life {
-            background: #71d58a;
+            background: var(--bonus-green);
         }
 
         .event-legend-marker.game-start {
-            background: #6fa8ff;
+            background: var(--ladder-primary);
         }
 
         .event-legend-marker.board-transition {
-            background: #f7f8fa;
+            background: var(--score-yellow);
         }
 
         .dashboard-link {
             display: inline-block;
             padding: 12px 18px;
-            border: 1px solid var(--card-border);
-            border-radius: 10px;
+            border:
+                1px solid
+                var(--score-yellow);
+            border-radius: 6px;
             background: var(--card-background);
-            color: var(--primary-text);
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
             font-weight: 700;
             text-decoration: none;
         }
 
         .dashboard-link:hover {
             background: var(--button-hover);
+            color: var(--score-yellow);
         }
 
         @media (max-width: 600px) {
@@ -1043,12 +1408,16 @@ def build_session_page(
                         {
                             label: "Score",
                             data: chartData,
-                            borderColor: "#e8b84a",
+                            borderColor: "#f8f919",
                             backgroundColor:
-                                "rgba(232, 184, 74, 0.12)",
+                                "rgba(244, 186, 21, 0.10)",
                             borderWidth: 3,
                             pointRadius: 0,
                             pointHoverRadius: 5,
+                            pointHoverBackgroundColor:
+                                "#f4ba15",
+                            pointHoverBorderColor:
+                                "#ee7511",
                             fill: true,
                             tension: 0.15,
                         },
@@ -1098,9 +1467,18 @@ def build_session_page(
                             title: {
                                 display: true,
                                 text: "Elapsed Time",
+                                color:
+                                    "rgba(19, 243, 255, 0.72)",
+                                font: {
+                                    family: "Courier New",
+                                    weight: "700",
+                                },
                             },
 
                             ticks: {
+                                color:
+                                    "rgba(19, 243, 255, 0.62)",
+
                                 callback(value) {
                                     return formatElapsedTime(
                                         value
@@ -1110,7 +1488,7 @@ def build_session_page(
 
                             grid: {
                                 color:
-                                    "rgba(171, 179, 192, 0.12)",
+                                    "rgba(19, 243, 255, 0.10)",
                             },
                         },
 
@@ -1120,9 +1498,18 @@ def build_session_page(
                             title: {
                                 display: true,
                                 text: "Score",
+                                color:
+                                    "rgba(19, 243, 255, 0.72)",
+                                font: {
+                                    family: "Courier New",
+                                    weight: "700",
+                                },
                             },
 
                             ticks: {
+                                color:
+                                    "rgba(19, 243, 255, 0.62)",
+
                                 callback(value) {
                                     return Number(
                                         value
@@ -1132,7 +1519,7 @@ def build_session_page(
 
                             grid: {
                                 color:
-                                    "rgba(171, 179, 192, 0.12)",
+                                    "rgba(19, 243, 255, 0.10)",
                             },
                         },
                     },

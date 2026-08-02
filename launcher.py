@@ -294,7 +294,7 @@ def validate_mame() -> None:
         )
 
         raise FileNotFoundError(
-            "DK Tracker setup is incomplete:\n"
+            "Jungle Gym setup is incomplete:\n"
             f"{details}"
         )
 
@@ -505,7 +505,7 @@ def launch_untracked_game() -> LaunchResult:
     """Launch Donkey Kong without creating tracker data."""
 
     print("===================================")
-    print("        DK Tracker")
+    print("        Jungle Gym")
     print("===================================")
     print()
     print("UNTRACKED PLAY")
@@ -539,7 +539,7 @@ def launch_tracked_game() -> LaunchResult:
     """Launch Donkey Kong with telemetry and save a session."""
 
     print("===================================")
-    print("        DK Tracker")
+    print("        Jungle Gym")
     print("===================================")
     print()
 
@@ -760,14 +760,14 @@ def launch_game(
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Launch Donkey Kong through DK Tracker."
+        description="Launch Donkey Kong through Jungle Gym."
     )
 
     parser.add_argument(
         "--no-tracking",
         action="store_true",
         help=(
-            "Launch Donkey Kong without the DK Tracker "
+            "Launch Donkey Kong without the Jungle Gym "
             "plugin or session logging."
         ),
     )

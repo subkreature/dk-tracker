@@ -94,7 +94,7 @@ end
 function dktracker.startplugin()
 
     print("=================================")
-    print("DK Tracker loaded from DK-Tracker project!")
+    print("Jungle Gym plugin loaded!")
     print("Version: " .. exports.version)
     print("Telemetry sampling: every emulated frame")
     print("=================================")

@@ -818,6 +818,7 @@ def load_dashboard_data() -> tuple[
     SessionSummary,
     str,
     str,
+    list[tuple[str, SessionSummary]],
 ]:
     """
     Load career data, the latest compatible session,
@@ -851,7 +852,17 @@ def load_dashboard_data() -> tuple[
         key=lambda item:
             item[0].folder.name,
     )
-
+    dashboard_sessions = sorted(
+        (
+            (
+                session.folder.name,
+                summary,
+            )
+            for session, summary in session_summaries
+        ),
+        key=lambda item: item[0],
+        reverse=True,
+    )
     high_score_sessions = [
         session
         for session, summary in session_summaries
@@ -895,6 +906,7 @@ def load_dashboard_data() -> tuple[
         latest_session_summary,
         latest_session.folder.name,
         career_high_achieved,
+        dashboard_sessions,
     )
 
 
@@ -926,11 +938,12 @@ def build_dashboard_html() -> str:
     """
 
     try:
-                (
+        (
             career_summary,
             latest_session_summary,
             latest_session_name,
             career_high_achieved,
+            dashboard_sessions,
         ) = load_dashboard_data()
 
     except (
@@ -942,11 +955,170 @@ def build_dashboard_html() -> str:
         return build_error_html(
             title="Dashboard data unavailable",
             message=(
-                "DK Tracker could not load "
+                "Jungle Gym could not load "
                 "the career data."
             ),
             details=str(error),
         )
+
+    recent_session_rows = []
+
+    for session_name, summary in dashboard_sessions[:5]:
+        try:
+            session_datetime = datetime.strptime(
+                session_name,
+                "%Y-%m-%d_%H-%M-%S",
+            )
+
+            session_date = (
+                session_datetime.strftime("%b ")
+                + str(session_datetime.day)
+                + session_datetime.strftime(", %Y")
+            )
+
+        except ValueError:
+            session_date = session_name
+
+        furthest_board = (
+            summary.furthest_board
+            or "—"
+        )
+
+        recent_session_rows.append(
+            f"""
+            <article class="recent-session-row">
+                <div class="recent-session-main">
+                    <p class="recent-session-date">
+                        {session_date}
+                    </p>
+
+                    <p class="recent-session-board">
+                        Furthest board:
+                        <span>{furthest_board}</span>
+                    </p>
+                </div>
+
+                <div class="recent-session-score">
+                    <strong>
+                        {summary.final_score:,}
+                    </strong>
+
+                    <span>
+                        {summary.boards_cleared}
+                        boards cleared
+                    </span>
+                </div>
+            </article>
+            """
+        )
+
+    recent_sessions_html = "\n".join(
+        recent_session_rows
+    )
+
+    performance_sessions = list(
+        reversed(
+            dashboard_sessions[:12]
+        )
+    )
+
+    performance_max_score = max(
+        (
+            summary.final_score
+            for _, summary in performance_sessions
+        ),
+        default=1,
+    )
+
+    performance_bar_items = []
+
+    for session_name, summary in performance_sessions:
+        try:
+            session_datetime = datetime.strptime(
+                session_name,
+                "%Y-%m-%d_%H-%M-%S",
+            )
+
+            session_label = (
+                session_datetime.strftime("%b ")
+                + str(session_datetime.day)
+            )
+
+        except ValueError:
+            session_label = session_name
+
+        bar_height = max(
+            6,
+            round(
+                summary.final_score
+                / performance_max_score
+                * 100
+            ),
+        )
+
+        performance_bar_items.append(
+            f"""
+            <div class="performance-bar-item">
+                <div class="performance-bar-track">
+                    <div
+                        class="performance-bar"
+                        style="height: {bar_height}%;"
+                        title="{session_label}: "
+                              "{summary.final_score:,}"
+                    ></div>
+                </div>
+
+                <span class="performance-bar-score">
+                    {summary.final_score:,}
+                </span>
+
+                <span class="performance-bar-label">
+                    {session_label}
+                </span>
+            </div>
+            """
+        )
+
+    performance_history_html = "\n".join(
+        performance_bar_items
+    )
+
+    best_first_death_score = max(
+        (
+            summary.first_death_score
+            for _, summary in dashboard_sessions
+            if summary.first_death_score is not None
+        ),
+        default=0,
+    )
+
+    most_boards_cleared = max(
+        (
+            summary.boards_cleared
+            for _, summary in dashboard_sessions
+        ),
+        default=0,
+    )
+
+    longest_run_seconds = max(
+        (
+            summary.duration_seconds
+            for _, summary in dashboard_sessions
+        ),
+        default=0,
+    )
+
+    longest_run_minutes = round(
+        longest_run_seconds / 60
+    )
+
+    best_board_points = max(
+        (
+            board_stat.best_points_gained
+            for board_stat in career_summary.board_stats
+        ),
+        default=0,
+    )
 
     return f"""\
 <!DOCTYPE html>
@@ -1029,7 +1201,6 @@ def build_dashboard_html() -> str:
             width: min(100%, 1000px);
             margin: 0 auto;
         }}
-
         header {{
             position: relative;
             margin-bottom: 32px;
@@ -1037,25 +1208,17 @@ def build_dashboard_html() -> str:
             overflow: hidden;
             border: 2px solid var(--girder-primary);
             border-radius: 10px;
-            background:            background:
+            background:
                 linear-gradient(
                     180deg,
                     #080000,
                     #000000
                 );
-                linear-gradient(
-                    180deg,
-                    #190607,
-                    #050000
-                );
             text-align: center;
             box-shadow:
                 0 0 0 3px var(--girder-shadow),
                 0 0 20px rgb(236 49 147 / 0.24);
-                0 0 0 3px #250405,
-                0 0 24px rgb(232 7 9 / 0.22);
         }}
-
         header::before,
         header::after {{
             content: "";
@@ -1090,7 +1253,7 @@ def build_dashboard_html() -> str:
 
         h1 {{
             margin: 0;
-            color: var(--girder-primary);
+            color: var(--barrel-gold);
             font-family:
                 "Courier New",
                 monospace;
@@ -1103,8 +1266,8 @@ def build_dashboard_html() -> str:
             line-height: 0.95;
             letter-spacing: 0.08em;
             text-shadow:
-                3px 3px 0 var(--girder-shadow),
-                0 0 18px rgb(240 87 232 / 0.32);
+                3px 3px 0 var(--barrel-orange),
+                0 0 18px rgb(244 186 21 / 0.26);
         }}
 
         .subtitle {{
@@ -1124,21 +1287,93 @@ def build_dashboard_html() -> str:
         }}
 
         .panel {{
+            position: relative;
             margin-bottom: 24px;
-            padding: 24px;
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            background: var(--panel-background);
+            padding: clamp(
+                22px,
+                3vw,
+                30px
+            );
+            overflow: hidden;
+            border:
+                2px solid
+                var(--girder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #080008,
+                    var(--panel-background)
+                );
+            box-shadow:
+                0 0 0 3px var(--girder-shadow),
+                0 10px 30px rgb(0 0 0 / 0.45);
+        }}
+
+                .panel::before,
+        .panel::after {{
+            content: "";
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 8px;
+            pointer-events: none;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 7px,
+                    var(--girder-primary) 7px 14px,
+                    var(--girder-shadow) 14px 21px
+                );
+        }}
+
+        .panel::before {{
+            top: 0;
+        }}
+
+        .panel::after {{
+            bottom: 0;
         }}
 
         .panel-heading {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
             margin: 0 0 8px;
-            font-size: 1.25rem;
+            color: var(--girder-primary);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: clamp(
+                1rem,
+                2.2vw,
+                1.25rem
+            );
+            font-weight: 900;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }}
+
+        .panel-heading::before {{
+            content: "";
+            flex: 0 0 10px;
+            width: 10px;
+            height: 10px;
+            border:
+                2px solid
+                var(--barrel-gold);
+            border-radius: 50%;
+            background:
+                var(--barrel-orange);
+            box-shadow:
+                inset 0 0 0 2px #000000;
         }}
 
         .panel-description {{
             margin: 0 0 20px;
             color: var(--secondary-text);
+            line-height: 1.55;
+            opacity: 0.88;
         }}
 
         .launch-buttons {{
@@ -1173,7 +1408,7 @@ def build_dashboard_html() -> str:
 
         .launch-button.primary {{
             border-color: var(--accent);
-            color: var(--accent);
+            color: var(--barrel-gold);
         }}
 
         .launch-button:disabled {{
@@ -1333,36 +1568,162 @@ def build_dashboard_html() -> str:
         }}
 
         .metric-card {{
+            position: relative;
             min-height: 170px;
-            padding: 24px;
+            padding: 26px 24px 24px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            border: 1px solid var(--card-border);
-            border-radius: 16px;
-            background: var(--card-background);
+            overflow: hidden;
+            border:
+                1px solid
+                var(--girder-primary);
+            border-radius: 8px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #0b000b,
+                    var(--card-background)
+                );
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(240 87 232 / 0.12),
+                0 8px 24px
+                rgb(0 0 0 / 0.4);
+        }}
+        .metric-card::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 6px,
+                    var(--girder-primary) 6px 12px,
+                    var(--girder-shadow) 12px 18px
+                );
+        }}
+
+        .metric-card::after {{
+            content: "";
+            position: absolute;
+            right: 12px;
+            bottom: 12px;
+            width: 8px;
+            height: 8px;
+            border:
+                2px solid
+                var(--barrel-gold);
+            border-radius: 50%;
+            background:
+                var(--barrel-orange);
+            box-shadow:
+                inset 0 0 0 2px
+                #000000;
+        }}
+        .metric-card.ladder-motif {{
+            padding-left: 54px;
+        }}
+
+        .metric-card.ladder-motif::after {{
+            right: auto;
+            bottom: auto;
+            top: 26px;
+            left: 18px;
+            width: 18px;
+            height: calc(100% - 52px);
+            border: 0;
+            border-radius: 0;
+            background:
+                repeating-linear-gradient(
+                    180deg,
+                    transparent 0 10px,
+                    var(--ladder-primary) 10px 12px
+                );
+            box-shadow:
+                inset 2px 0 0
+                var(--ladder-primary),
+                inset -2px 0 0
+                var(--ladder-primary);
+            opacity: 0.82;
+        }}
+
+        .metric-card.barrel-motif::after {{
+            content: none;
+        }}
+
+                .oilcan-icon {{
+            position: absolute;
+            right: 16px;
+            bottom: 14px;
+            width: 56px;
+            height: 72px;
+            overflow: visible;
+            image-rendering: pixelated;
+            filter:
+                drop-shadow(
+                    0 0 6px
+                    rgb(83 245 255 / 0.22)
+                )
+                drop-shadow(
+                    0 0 8px
+                    rgb(255 122 41 / 0.18)
+                );
+        }}
+
+        .oilcan-icon .can-body {{
+            fill: var(--ladder-cyan);
+        }}
+
+        .oilcan-icon .can-dark {{
+            fill: #167f9d;
+        }}
+
+        .oilcan-icon .can-light {{
+            fill: #8df7ff;
+        }}
+
+        .oilcan-icon .flame-outer {{
+            fill: var(--barrel-orange);
+        }}
+
+        .oilcan-icon .flame-inner {{
+            fill: var(--score-yellow);
         }}
 
         .metric-label {{
             margin: 0;
-            color: var(--secondary-text);
+            color: var(--ladder-primary);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: 0.95rem;
-            letter-spacing: 0.08em;
+            font-weight: 700;
+            letter-spacing: 0.1em;
             text-transform: uppercase;
         }}
 
-                       .metric-value {{
+        .metric-value {{
             margin: 16px 0;
             color: var(--primary-text);
+            font-family:
+                "Courier New",
+                monospace;
             font-size: clamp(
                 2rem,
                 3.6vw,
                 3.1rem
             );
-            font-weight: 700;
+            font-weight: 900;
             line-height: 1;
-            letter-spacing: -0.035em;
+            letter-spacing: -0.045em;
             white-space: nowrap;
+            text-shadow:
+                2px 2px 0
+                rgb(142 3 5 / 0.65);
         }}
 
         .metric-value.score-large {{
@@ -1385,10 +1746,17 @@ def build_dashboard_html() -> str:
             margin: 0;
             color: var(--secondary-text);
             font-size: 0.9rem;
+            line-height: 1.4;
+            opacity: 0.88;
         }}
 
         .highlight {{
-            color: var(--accent);
+            color: var(--score-yellow);
+            text-shadow:
+                2px 2px 0
+                var(--barrel-orange),
+                0 0 12px
+                rgb(248 249 25 / 0.22);
         }}
 
         .status-panel {{
@@ -1410,10 +1778,10 @@ def build_dashboard_html() -> str:
             display: inline-block;
             margin-top: 18px;
             padding: 12px 18px;
-            border: 1px solid var(--accent);
+            border: 1px solid var(--score-yellow);
             border-radius: 10px;
             background: var(--card-background);
-            color: var(--accent);
+            color: var(--barrel-gold);
             font-weight: 700;
             text-decoration: none;
         }}
@@ -1422,11 +1790,313 @@ def build_dashboard_html() -> str:
             background: var(--button-hover);
         }}
 
+        .recent-sessions {{
+            margin-top: 24px;
+        }}
+
+        .recent-session-list {{
+            display: grid;
+            gap: 10px;
+        }}
+
+        .recent-session-row {{
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            min-height: 66px;
+            padding: 12px 16px;
+            overflow: hidden;
+            border: 1px solid rgb(236 49 147 / 0.42);
+            border-radius: 5px;
+            background:
+                linear-gradient(
+                    90deg,
+                    #090009,
+                    var(--card-background)
+                );
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(240 87 232 / 0.04);
+        }}
+
+        .recent-session-row::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background:
+                linear-gradient(
+                    180deg,
+                    var(--girder-highlight),
+                    var(--girder-primary),
+                    var(--girder-shadow)
+                );
+            opacity: 0.72;
+        }}
+
+        .recent-session-main {{
+            min-width: 0;
+            padding-left: 4px;
+        }}
+
+        .recent-session-date {{
+            margin: 0 0 5px;
+            color: var(--ladder-primary);
+            font-family: "Courier New", monospace;
+            font-size: 0.86rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }}
+
+        .recent-session-board {{
+            margin: 0;
+            color: var(--primary-text);
+            font-size: 0.84rem;
+            opacity: 0.9;
+        }}
+
+        .recent-session-board span {{
+            color: var(--barrel-gold);
+            font-family: "Courier New", monospace;
+            font-weight: 700;
+        }}
+
+        .recent-session-score {{
+            flex-shrink: 0;
+            text-align: right;
+        }}
+
+        .recent-session-score strong {{
+            display: block;
+            color: var(--score-yellow);
+            font-family: "Courier New", monospace;
+            font-size: clamp(1.2rem, 2.4vw, 1.65rem);
+            line-height: 1;
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
+        }}
+
+        .recent-session-score span {{
+            display: block;
+            margin-top: 5px;
+            color: var(--ladder-primary);
+            font-size: 0.74rem;
+            opacity: 0.82;
+        }}
+
+        .performance-history {{
+            margin-top: 24px;
+        }}
+
+        .performance-chart {{
+            display: grid;
+            grid-template-columns:
+                repeat(
+                    auto-fit,
+                    minmax(54px, 1fr)
+                );
+            align-items: end;
+            gap: 12px;
+            min-height: 280px;
+            padding: 24px 18px 18px;
+            border: 1px solid rgb(19 243 255 / 0.32);
+            border-radius: 6px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #050005,
+                    #000000
+                );
+            box-shadow:
+                inset 0 0 24px
+                rgb(3 1 220 / 0.12);
+        }}
+
+        .performance-bar-item {{
+            min-width: 0;
+            display: grid;
+            grid-template-rows:
+                190px
+                auto
+                auto;
+            gap: 7px;
+            align-items: end;
+            text-align: center;
+        }}
+
+        .performance-bar-track {{
+            position: relative;
+            height: 190px;
+            overflow: hidden;
+            border-bottom:
+                3px solid
+                var(--girder-primary);
+            background:
+                repeating-linear-gradient(
+                    180deg,
+                    transparent 0 37px,
+                    rgb(19 243 255 / 0.07) 37px 38px
+                );
+            box-shadow:
+                0 3px 0
+                var(--girder-shadow);
+        }}
+
+        .performance-bar {{
+            position: absolute;
+            right: 28%;
+            bottom: 0;
+            left: 28%;
+            min-height: 8px;
+            border-left:
+                2px solid
+                var(--ladder-primary);
+            border-right:
+                2px solid
+                var(--ladder-primary);
+            background:
+                repeating-linear-gradient(
+                    180deg,
+                    transparent 0 8px,
+                    var(--ladder-primary) 8px 10px
+                );
+            box-shadow:
+                2px 0 0
+                var(--ladder-shadow),
+                -2px 0 0
+                var(--ladder-shadow),
+                0 0 10px
+                rgb(19 243 255 / 0.16);
+        }}
+
+        .performance-bar-score {{
+            overflow: hidden;
+            color: var(--barrel-gold);
+            font-family: "Courier New", monospace;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }}
+
+        .performance-bar-label {{
+            overflow: hidden;
+            color: var(--score-yellow);
+            font-family: "Courier New", monospace;
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            text-transform: uppercase;
+            white-space: nowrap;
+            opacity: 0.95;
+        }}
+
+        .personal-bests {{
+            margin-top: 24px;
+        }}
+
+        .personal-best-grid {{
+            display: grid;
+            grid-template-columns:
+                repeat(
+                    auto-fit,
+                    minmax(180px, 1fr)
+                );
+            gap: 12px;
+        }}
+
+        .personal-best-card {{
+            position: relative;
+            min-height: 118px;
+            padding: 18px 18px 16px;
+            overflow: hidden;
+            border:
+                1px solid
+                rgb(236 49 147 / 0.5);
+            border-radius: 6px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #0a000a,
+                    var(--card-background)
+                );
+            box-shadow:
+                inset 0 0 0 1px
+                rgb(240 87 232 / 0.06);
+        }}
+
+        .personal-best-card::before {{
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            left: 0;
+            height: 4px;
+            background:
+                repeating-linear-gradient(
+                    135deg,
+                    var(--girder-highlight) 0 6px,
+                    var(--girder-primary) 6px 12px,
+                    var(--girder-shadow) 12px 18px
+                );
+        }}
+
+        .personal-best-label {{
+            margin: 0 0 14px;
+            color: var(--ladder-primary);
+            font-family: "Courier New", monospace;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }}
+
+        .personal-best-value {{
+            margin: 0;
+            color: var(--barrel-gold);
+            font-family: "Courier New", monospace;
+            font-size: clamp(1.45rem, 3vw, 2rem);
+            font-weight: 900;
+            line-height: 1;
+            text-shadow:
+                1px 1px 0
+                var(--barrel-orange);
+        }}
+
+        .personal-best-detail {{
+            margin: 9px 0 0;
+            color: var(--primary-text);
+            font-size: 0.78rem;
+            opacity: 0.78;
+        }}
+
         @media (max-width: 600px) {{
+                    .metric-card.ladder-motif {{
+                padding-left: 48px;
+            }}
+
+            .metric-card.ladder-motif::after {{
+                left: 15px;
+            }}
             body {{
                 padding: 20px;
             }}
+            .panel {{
+                padding:
+                    22px
+                    16px;
+            }}
 
+            .panel::before,
+            .panel::after {{
+                height: 6px;
+            }}
             .launch-buttons {{
                 grid-template-columns: 1fr;
             }}
@@ -1469,7 +2139,7 @@ def build_dashboard_html() -> str:
 
             <p class="panel-description">
                 Choose whether this game should be recorded
-                in your DK Tracker career statistics.
+                in your Jungle Gym career statistics.
             </p>
 
             <div class="launch-buttons">
@@ -1690,7 +2360,7 @@ def build_dashboard_html() -> str:
                 </p>
             </article>
 
-            <article class="metric-card">
+            <article class="metric-card ladder-motif">
                 <p class="metric-label">
                     Tracked Sessions
                 </p>
@@ -1705,8 +2375,182 @@ def build_dashboard_html() -> str:
                 </p>
             </article>
 
-            <article class="metric-card">
-                <p class="metric-label">
+            <article class="metric-card barrel-motif">
+                            <svg
+                    class="oilcan-icon"
+                    viewBox="0 0 24 32"
+                    role="img"
+                    aria-label="Flaming oil can"
+                    shape-rendering="crispEdges"
+                >
+                    <!-- Flame -->
+                    <rect
+                        class="flame-outer"
+                        x="9"
+                        y="0"
+                        width="2"
+                        height="2"
+                    />
+                    <rect
+                        class="flame-outer"
+                        x="6"
+                        y="2"
+                        width="3"
+                        height="2"
+                    />
+                    <rect
+                        class="flame-outer"
+                        x="12"
+                        y="3"
+                        width="2"
+                        height="2"
+                    />
+                    <rect
+                        class="flame-outer"
+                        x="7"
+                        y="5"
+                        width="8"
+                        height="2"
+                    />
+                    <rect
+                        class="flame-outer"
+                        x="5"
+                        y="7"
+                        width="4"
+                        height="3"
+                    />
+                    <rect
+                        class="flame-outer"
+                        x="13"
+                        y="7"
+                        width="4"
+                        height="3"
+                    />
+                    <rect
+                        class="flame-outer"
+                        x="8"
+                        y="9"
+                        width="7"
+                        height="4"
+                    />
+
+                    <rect
+                        class="flame-inner"
+                        x="9"
+                        y="5"
+                        width="3"
+                        height="3"
+                    />
+                    <rect
+                        class="flame-inner"
+                        x="7"
+                        y="8"
+                        width="3"
+                        height="3"
+                    />
+                    <rect
+                        class="flame-inner"
+                        x="12"
+                        y="9"
+                        width="3"
+                        height="3"
+                    />
+
+                    <!-- Can top -->
+                    <rect
+                        class="can-dark"
+                        x="4"
+                        y="13"
+                        width="16"
+                        height="2"
+                    />
+                    <rect
+                        class="can-body"
+                        x="3"
+                        y="15"
+                        width="18"
+                        height="14"
+                    />
+
+                    <!-- Side pipe -->
+                    <rect
+                        class="can-dark"
+                        x="1"
+                        y="15"
+                        width="2"
+                        height="14"
+                    />
+                    <rect
+                        class="can-light"
+                        x="1"
+                        y="20"
+                        width="2"
+                        height="2"
+                    />
+
+                    <!-- Can bands -->
+                    <rect
+                        class="can-light"
+                        x="3"
+                        y="18"
+                        width="18"
+                        height="2"
+                    />
+                    <rect
+                        class="can-light"
+                        x="3"
+                        y="25"
+                        width="18"
+                        height="2"
+                    />
+
+                    <!-- Front panel -->
+                    <rect
+                        class="can-dark"
+                        x="6"
+                        y="21"
+                        width="12"
+                        height="3"
+                    />
+                    <rect
+                        class="can-light"
+                        x="8"
+                        y="22"
+                        width="2"
+                        height="1"
+                    />
+                    <rect
+                        class="can-light"
+                        x="11"
+                        y="22"
+                        width="2"
+                        height="1"
+                    />
+                    <rect
+                        class="can-light"
+                        x="14"
+                        y="22"
+                        width="2"
+                        height="1"
+                    />
+
+                    <!-- Feet -->
+                    <rect
+                        class="can-dark"
+                        x="2"
+                        y="29"
+                        width="4"
+                        height="2"
+                    />
+                    <rect
+                        class="can-dark"
+                        x="18"
+                        y="29"
+                        width="4"
+                        height="2"
+                    />
+                </svg>
+            <p class="metric-label">
                     Average Score
                 </p>
 
@@ -1725,6 +2569,107 @@ def build_dashboard_html() -> str:
                     {career_summary.median_score:,.0f}
                 </p>
             </article>
+        </section>
+
+        <section class="panel personal-bests">
+            <h2 class="panel-heading">
+                Personal Bests
+            </h2>
+
+            <p class="panel-description">
+                Standout records from your tracked runs.
+            </p>
+
+            <div class="personal-best-grid">
+                <article class="personal-best-card">
+                    <p class="personal-best-label">
+                        Best First Death
+                    </p>
+
+                    <p class="personal-best-value">
+                        {best_first_death_score:,}
+                    </p>
+
+                    <p class="personal-best-detail">
+                        Highest score reached before
+                        losing the first life.
+                    </p>
+                </article>
+
+                <article class="personal-best-card">
+                    <p class="personal-best-label">
+                        Most Boards Cleared
+                    </p>
+
+                    <p class="personal-best-value">
+                        {most_boards_cleared}
+                    </p>
+
+                    <p class="personal-best-detail">
+                        Best single-run board total.
+                    </p>
+                </article>
+
+                <article class="personal-best-card">
+                    <p class="personal-best-label">
+                        Longest Run
+                    </p>
+
+                    <p class="personal-best-value">
+                        {longest_run_minutes} min
+                    </p>
+
+                    <p class="personal-best-detail">
+                        Longest tracked session.
+                    </p>
+                </article>
+
+                <article class="personal-best-card">
+                    <p class="personal-best-label">
+                        Best Board Gain
+                    </p>
+
+                    <p class="personal-best-value">
+                        {best_board_points:,}
+                    </p>
+
+                    <p class="personal-best-detail">
+                        Most points gained on one board.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <section class="panel performance-history">
+            <h2 class="panel-heading">
+                Performance History
+            </h2>
+
+            <p class="panel-description">
+                Your score progression across the last
+                twelve tracked runs.
+            </p>
+
+            <div
+                class="performance-chart"
+                aria-label="Recent score history"
+            >
+                {performance_history_html}
+            </div>
+        </section>
+
+        <section class="panel recent-sessions">
+            <h2 class="panel-heading">
+                Recent Sessions
+            </h2>
+
+            <p class="panel-description">
+                Your five most recent tracked runs.
+            </p>
+
+            <div class="recent-session-list">
+                {recent_sessions_html}
+            </div>
         </section>
 
         <div style="text-align:center; margin-top:18px;">
@@ -2310,7 +3255,7 @@ def build_not_found_html(
     return build_error_html(
         title="Page not found",
         message=(
-            "DK Tracker does not have a page "
+            "Jungle Gym does not have a page "
             "at this address."
         ),
         details=requested_path,
@@ -2474,7 +3419,7 @@ class DashboardRequestHandler(
                 build_error_html(
                     title="Session data unavailable",
                     message=(
-                        "DK Tracker could not load "
+                        "Jungle Gym could not load "
                         "the requested session."
                     ),
                     details=str(error),
@@ -2690,7 +3635,7 @@ def run_dashboard() -> None:
 
     except OSError as error:
         print(
-            "Could not start DK Tracker "
+            "Could not start Jungle Gym "
             f"dashboard on port {PORT}."
         )
         print(error)
@@ -2701,7 +3646,7 @@ def run_dashboard() -> None:
     )
 
     print("===================================")
-    print(" DK Tracker Dashboard")
+    print(" Jungle Gym Dashboard")
     print("===================================")
     print()
     print(
