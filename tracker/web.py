@@ -815,9 +815,9 @@ def get_live_session_state() -> dict[str, object]:
 
 def load_dashboard_data() -> tuple[
     CareerSummary,
-    SessionSummary,
-    str,
-    str,
+    SessionSummary | None,
+    str | None,
+    str | None,
     list[tuple[str, SessionSummary]],
 ]:
     """
@@ -834,9 +834,12 @@ def load_dashboard_data() -> tuple[
     )
 
     if not career.sessions:
-        raise ValueError(
-            "No compatible sessions are available "
-            "for the dashboard."
+        return (
+            career_summary,
+            None,
+            None,
+            None,
+            [],
         )
 
     session_summaries = [
@@ -852,6 +855,7 @@ def load_dashboard_data() -> tuple[
         key=lambda item:
             item[0].folder.name,
     )
+
     dashboard_sessions = sorted(
         (
             (
@@ -863,6 +867,7 @@ def load_dashboard_data() -> tuple[
         key=lambda item: item[0],
         reverse=True,
     )
+
     high_score_sessions = [
         session
         for session, summary in session_summaries
@@ -961,6 +966,51 @@ def build_dashboard_html() -> str:
             details=str(error),
         )
 
+    if latest_session_summary is None:
+        last_score = 0
+        last_score_class = ""
+        latest_session_detail = (
+            "Play your first tracked game."
+        )
+        career_high_detail = (
+            "No tracked games yet."
+        )
+        latest_session_link_html = ""
+    else:
+        last_score = (
+            latest_session_summary.final_score
+        )
+
+        last_score_class = (
+            "score-extra-large"
+            if last_score >= 1_000_000
+            else "score-large"
+            if last_score >= 100_000
+            else ""
+        )
+
+        latest_session_detail = (
+            "Session: "
+            + escape(
+                latest_session_name or ""
+            )
+        )
+
+        career_high_detail = (
+            "Achieved "
+            + escape(
+                career_high_achieved or ""
+            )
+        )
+
+        latest_session_link_html = """
+        <div style="text-align:center; margin-top:18px;">
+            <a class="session-link" href="/session">
+                View Latest Session
+            </a>
+        </div>
+        """
+
     recent_session_rows = []
 
     for session_name, summary in dashboard_sessions[:5]:
@@ -984,6 +1034,11 @@ def build_dashboard_html() -> str:
             or "—"
         )
 
+        escaped_session_name = escape(
+            session_name,
+            quote=True,
+        )
+
         recent_session_rows.append(
             f"""
             <article class="recent-session-row">
@@ -998,22 +1053,41 @@ def build_dashboard_html() -> str:
                     </p>
                 </div>
 
-                <div class="recent-session-score">
-                    <strong>
-                        {summary.final_score:,}
-                    </strong>
+                <div class="recent-session-actions">
+                    <div class="recent-session-score">
+                        <strong>
+                            {summary.final_score:,}
+                        </strong>
 
-                    <span>
-                        {summary.boards_cleared}
-                        boards cleared
-                    </span>
+                        <span>
+                            {summary.boards_cleared}
+                            boards cleared
+                        </span>
+                    </div>
+
+                    <button
+                        class="exclude-session-button"
+                        type="button"
+                        data-session-name="{escaped_session_name}"
+                    >
+                        Exclude
+                    </button>
                 </div>
             </article>
             """
         )
 
-    recent_sessions_html = "\n".join(
-        recent_session_rows
+    recent_sessions_html = (
+        "\n".join(
+            recent_session_rows
+        )
+        if recent_session_rows
+        else """
+        <p class="panel-description">
+            No tracked sessions yet. Start a tracked game
+            to begin building your Jungle Gym career.
+        </p>
+        """
     )
 
     performance_sessions = list(
@@ -1023,11 +1097,14 @@ def build_dashboard_html() -> str:
     )
 
     performance_max_score = max(
-        (
-            summary.final_score
-            for _, summary in performance_sessions
+        1,
+        max(
+            (
+                summary.final_score
+                for _, summary in performance_sessions
+            ),
+            default=0,
         ),
-        default=1,
     )
 
     performance_bar_items = []
@@ -1079,8 +1156,17 @@ def build_dashboard_html() -> str:
             """
         )
 
-    performance_history_html = "\n".join(
-        performance_bar_items
+    performance_history_html = (
+        "\n".join(
+            performance_bar_items
+        )
+        if performance_bar_items
+        else """
+        <p class="panel-description">
+            Performance history will appear after your
+            first tracked game.
+        </p>
+        """
     )
 
     best_first_death_score = max(
@@ -1866,6 +1952,13 @@ def build_dashboard_html() -> str:
             font-weight: 700;
         }}
 
+        .recent-session-actions {{
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-shrink: 0;
+        }}
+
         .recent-session-score {{
             flex-shrink: 0;
             text-align: right;
@@ -1888,6 +1981,38 @@ def build_dashboard_html() -> str:
             color: var(--ladder-primary);
             font-size: 0.74rem;
             opacity: 0.82;
+        }}
+
+        .exclude-session-button {{
+            padding: 8px 10px;
+            border:
+                1px solid
+                var(--danger-red);
+            border-radius: 6px;
+            background: #100000;
+            color: var(--danger-red);
+            cursor: pointer;
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            transition:
+                background 120ms ease,
+                color 120ms ease,
+                opacity 120ms ease;
+        }}
+
+        .exclude-session-button:hover:not(:disabled) {{
+            background: var(--danger-red);
+            color: #000000;
+        }}
+
+        .exclude-session-button:disabled {{
+            cursor: not-allowed;
+            opacity: 0.45;
         }}
 
         .performance-history {{
@@ -2324,19 +2449,12 @@ def build_dashboard_html() -> str:
                     Last Score
                 </p>
 
-                            <p class="metric-value {
-                    "score-extra-large"
-                    if latest_session_summary.final_score >= 1_000_000
-                    else "score-large"
-                    if latest_session_summary.final_score >= 100_000
-                    else ""
-                }">
-                    {latest_session_summary.final_score:,}
+                <p class="metric-value {last_score_class}">
+                    {last_score:,}
                 </p>
 
                 <p class="metric-detail">
-                    Session:
-                    {escape(latest_session_name)}
+                    {latest_session_detail}
                 </p>
             </article>
 
@@ -2345,7 +2463,7 @@ def build_dashboard_html() -> str:
                     Career High
                 </p>
 
-                                <p class="metric-value highlight {
+                <p class="metric-value highlight {
                     "score-extra-large"
                     if career_summary.high_score >= 1_000_000
                     else "score-large"
@@ -2355,8 +2473,8 @@ def build_dashboard_html() -> str:
                     {career_summary.high_score:,}
                 </p>
 
-                                <p class="metric-detail">
-                    Achieved {career_high_achieved}
+                <p class="metric-detail">
+                    {career_high_detail}
                 </p>
             </article>
 
@@ -2672,11 +2790,7 @@ def build_dashboard_html() -> str:
             </div>
         </section>
 
-        <div style="text-align:center; margin-top:18px;">
-            <a class="session-link" href="/session">
-                View Latest Session
-            </a>
-        </div>
+        {latest_session_link_html}
 
         <div class="status-panel">
             <strong>Dashboard active.</strong>
@@ -2756,6 +2870,11 @@ def build_dashboard_html() -> str:
         const liveMessage =
             document.getElementById(
                 "live-message"
+            );
+
+        const excludeSessionButtons =
+            document.querySelectorAll(
+                ".exclude-session-button"
             );
 
         let previousState = null;
@@ -3128,6 +3247,69 @@ def build_dashboard_html() -> str:
             }}
         }}
 
+        async function excludeSession(
+            button
+        ) {{
+            const sessionName =
+                button.dataset.sessionName;
+
+            if (!sessionName) {{
+                return;
+            }}
+
+            const confirmed = window.confirm(
+                "Exclude this session from "
+                + "career statistics?"
+            );
+
+            if (!confirmed) {{
+                return;
+            }}
+
+            button.disabled = true;
+            button.textContent = "Excluding...";
+
+            try {{
+                const response = await fetch(
+                    (
+                        "/session/exclude?name="
+                        + encodeURIComponent(
+                            sessionName
+                        )
+                    ),
+                    {{
+                        method: "POST",
+                        headers: {{
+                            "Content-Type":
+                                "application/json",
+                        }},
+                    }}
+                );
+
+                const result =
+                    await response.json();
+
+                if (!response.ok) {{
+                    throw new Error(
+                        result.message
+                        || "Exclusion request failed."
+                    );
+                }}
+
+                window.location.reload();
+
+            }} catch (error) {{
+                button.disabled = false;
+                button.textContent = "Exclude";
+
+                window.alert(
+                    error.message
+                    || "The session could not "
+                    + "be excluded."
+                );
+            }}
+        }}
+
         trackedButton.addEventListener(
             "click",
             () => requestLaunch(
@@ -3140,6 +3322,17 @@ def build_dashboard_html() -> str:
             () => requestLaunch(
                 "/launch/untracked"
             )
+        );
+
+        excludeSessionButtons.forEach(
+            (button) => {{
+                button.addEventListener(
+                    "click",
+                    () => excludeSession(
+                        button
+                    )
+                );
+            }}
         );
 
         fetchStatus();
@@ -3312,6 +3505,8 @@ class DashboardRequestHandler(
                 self.launch_tracked_game,
             "/launch/untracked":
                 self.launch_untracked_game,
+            "/session/exclude":
+                self.exclude_session,
         }
 
         route_handler = routes.get(
@@ -3483,6 +3678,104 @@ class DashboardRequestHandler(
         self.send_json(
             response,
             status=status,
+        )
+
+    def exclude_session(self) -> None:
+        """
+        Exclude one session from career analytics.
+        """
+
+        parsed_url = urlparse(self.path)
+        query_values = parse_qs(
+            parsed_url.query
+        )
+
+        requested_names = query_values.get(
+            "name",
+            [],
+        )
+
+        if not requested_names:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "No session name was provided."
+                    ),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        session_name = requested_names[0]
+
+        if (
+            Path(session_name).name
+            != session_name
+        ):
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "The session name is invalid."
+                    ),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        session_folder = (
+            SESSIONS_FOLDER / session_name
+        )
+
+        if not session_folder.is_dir():
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "The requested session "
+                        "does not exist."
+                    ),
+                },
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+
+        exclusion_marker = (
+            session_folder
+            / ".exclude-from-career"
+        )
+
+        try:
+            exclusion_marker.touch(
+                exist_ok=True
+            )
+
+        except OSError as error:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "The session could not "
+                        "be excluded."
+                    ),
+                    "details": str(error),
+                },
+                status=(
+                    HTTPStatus.INTERNAL_SERVER_ERROR
+                ),
+            )
+            return
+
+        self.send_json(
+            {
+                "success": True,
+                "message": (
+                    "Session excluded from "
+                    "career statistics."
+                ),
+                "session_name": session_name,
+            }
         )
 
     def serve_not_found(

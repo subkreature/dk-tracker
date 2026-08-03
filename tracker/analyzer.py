@@ -351,9 +351,23 @@ def analyze_career(
     ]
 
     if not session_summaries:
-        raise ValueError(
-            "No compatible sessions were available "
-            "for career analysis."
+        return CareerSummary(
+            tracked_sessions=0,
+            skipped_sessions=(
+                len(career.failed_sessions)
+                + len(career.excluded_sessions)
+            ),
+            high_score=0,
+            average_score=0.0,
+            median_score=0.0,
+            lifetime_points=0,
+            total_play_time_seconds=0.0,
+            total_boards_cleared=0,
+            total_lives_lost=0,
+            completed_games=0,
+            quit_or_incomplete_games=0,
+            average_first_death_score=None,
+            board_stats=[],
         )
 
     final_scores = [

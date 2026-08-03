@@ -273,12 +273,6 @@ def load_career(
         career_path
     )
 
-    if not session_folders:
-        raise ValueError(
-            f"No session folders found in:\n"
-            f"{career_path}"
-        )
-
     sessions: list[Session] = []
     failed_sessions: list[FailedSession] = []
     excluded_sessions: list[Path] = []
