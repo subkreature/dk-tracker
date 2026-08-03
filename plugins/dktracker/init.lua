@@ -637,7 +637,7 @@ function dktracker.startplugin()
                 and board_active == 0x02
                 and raw_level > 0
                 and is_valid_screen(raw_screen_type)
-                and lives_remaining > 0
+                and lives_remaining >= 2
 
             if waiting_for_new_game then
                 first_board_is_active =
