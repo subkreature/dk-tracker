@@ -4,8 +4,11 @@ from tracker.live import (
     get_lives_remaining,
 )
 from tracker.config import (
+    DashboardSettings,
     SESSIONS_FOLDER,
     load_config,
+    load_dashboard_settings,
+    save_dashboard_settings,
     validate_config,
 )
 from tracker.setup_page import (
@@ -942,6 +945,82 @@ def build_dashboard_html() -> str:
     Build the main dashboard page.
     """
 
+    dashboard_settings = (
+        load_dashboard_settings()
+    )
+
+    performance_history_checked = (
+        "checked"
+        if dashboard_settings.performance_history_visible
+        else ""
+    )
+
+    performance_history_hidden = (
+        ""
+        if dashboard_settings.performance_history_visible
+        else "hidden"
+    )
+
+    recent_sessions_checked = (
+        "checked"
+        if dashboard_settings.recent_sessions_visible
+        else ""
+    )
+
+    recent_sessions_hidden = (
+        ""
+        if dashboard_settings.recent_sessions_visible
+        else "hidden"
+    )
+
+    personal_bests_checked = (
+        "checked"
+        if dashboard_settings.personal_bests_visible
+        else ""
+    )
+
+    personal_bests_hidden = (
+        ""
+        if dashboard_settings.personal_bests_visible
+        else "hidden"
+    )
+
+    career_statistics_checked = (
+        "checked"
+        if dashboard_settings.career_statistics_visible
+        else ""
+    )
+
+    career_statistics_hidden = (
+        ""
+        if dashboard_settings.career_statistics_visible
+        else "hidden"
+    )
+
+    launch_controls_checked = (
+        "checked"
+        if dashboard_settings.launch_controls_visible
+        else ""
+    )
+
+    launch_controls_hidden = (
+        ""
+        if dashboard_settings.launch_controls_visible
+        else "hidden"
+    )
+
+    live_session_checked = (
+        "checked"
+        if dashboard_settings.live_session_visible
+        else ""
+    )
+
+    live_session_hidden = (
+        ""
+        if dashboard_settings.live_session_visible
+        else "hidden"
+    )
+
     try:
         (
             career_summary,
@@ -1370,6 +1449,116 @@ def build_dashboard_html() -> str:
             font-weight: 700;
             letter-spacing: 0.16em;
             text-transform: uppercase;
+        }}
+
+        .header-actions {{
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }}
+
+        .dashboard-customize-button {{
+            padding: 10px 16px;
+            border:
+                2px solid
+                var(--ladder-primary);
+            border-radius: 6px;
+            background:
+                linear-gradient(
+                    180deg,
+                    #160016,
+                    #050005
+                );
+            color: var(--barrel-gold);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 0.78rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            box-shadow:
+                0 0 0 2px #000000,
+                0 0 12px rgb(41 182 246 / 0.24);
+            transition:
+                transform 120ms ease,
+                border-color 120ms ease,
+                color 120ms ease,
+                box-shadow 120ms ease;
+        }}
+
+        .dashboard-customize-button:hover {{
+            border-color: var(--barrel-gold);
+            color: #ffffff;
+            box-shadow:
+                0 0 0 2px #000000,
+                0 0 16px rgb(244 186 21 / 0.3);
+            transform: translateY(-1px);
+        }}
+
+        .dashboard-customize-button:focus-visible {{
+            outline:
+                3px solid
+                var(--barrel-gold);
+            outline-offset: 4px;
+        }}
+
+        .dashboard-customization-panel[hidden] {{
+            display: none;
+        }}
+
+        .dashboard-module-list {{
+            display: grid;
+            gap: 12px;
+            margin-top: 20px;
+        }}
+
+        .dashboard-module-option {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 16px 18px;
+            border:
+                1px solid
+                var(--card-border);
+            border-radius: 8px;
+            background: var(--card-background);
+            cursor: pointer;
+        }}
+
+        .dashboard-module-option:hover {{
+            border-color: var(--ladder-primary);
+        }}
+
+        .dashboard-module-name {{
+            color: var(--primary-text);
+            font-weight: 700;
+        }}
+
+        .dashboard-module-toggle {{
+            width: 22px;
+            height: 22px;
+            flex: 0 0 auto;
+            accent-color: var(--barrel-gold);
+            cursor: pointer;
+        }}
+
+        .dashboard-customization-actions {{
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }}
+
+        .dashboard-customize-button:disabled {{
+            opacity: 0.65;
+            cursor: wait;
+            transform: none;
+        }}
+
+        .dashboard-module[hidden] {{
+            display: none;
         }}
 
         .panel {{
@@ -2249,11 +2438,170 @@ def build_dashboard_html() -> str:
             <p class="subtitle">
                 Arcade performance and training dashboard
             </p>
+
+            <div class="header-actions">
+                <button
+                    id="dashboard-customize-button"
+                    class="dashboard-customize-button"
+                    type="button"
+                    aria-controls="dashboard-customization-panel"
+                    aria-expanded="false"
+                >
+                    Customize Dashboard
+                </button>
+            </div>
         </header>
 
         <section
-            class="panel"
+            id="dashboard-customization-panel"
+            class="panel dashboard-customization-panel"
+            aria-labelledby="dashboard-customization-heading"
+            hidden
+        >
+            <h2
+                id="dashboard-customization-heading"
+                class="panel-heading"
+            >
+                Configure Cabinet
+            </h2>
+
+            <p class="panel-description">
+                Choose which instruments appear on your
+                Jungle Gym dashboard.
+            </p>
+
+            <div class="dashboard-module-list">
+                <label
+                    class="dashboard-module-option"
+                    for="performance-history-toggle"
+                >
+                    <span class="dashboard-module-name">
+                        Performance History
+                    </span>
+
+                    <input
+                        id="performance-history-toggle"
+                        class="dashboard-module-toggle"
+                        type="checkbox"
+                        role="switch"
+                        data-setting-name="performance_history_visible"
+                        data-panel-id="performance-history-panel"
+                        {performance_history_checked}
+                    >
+                </label>
+
+                <label
+                    class="dashboard-module-option"
+                    for="recent-sessions-toggle"
+                >
+                    <span class="dashboard-module-name">
+                        Recent Sessions
+                    </span>
+
+                    <input
+                        id="recent-sessions-toggle"
+                        class="dashboard-module-toggle"
+                        type="checkbox"
+                        role="switch"
+                        data-setting-name="recent_sessions_visible"
+                        data-panel-id="recent-sessions-panel"
+                        {recent_sessions_checked}
+                    >
+                </label>
+
+                <label
+                    class="dashboard-module-option"
+                    for="personal-bests-toggle"
+                >
+                    <span class="dashboard-module-name">
+                        Personal Bests
+                    </span>
+
+                    <input
+                        id="personal-bests-toggle"
+                        class="dashboard-module-toggle"
+                        type="checkbox"
+                        role="switch"
+                        data-setting-name="personal_bests_visible"
+                        data-panel-id="personal-bests-panel"
+                        {personal_bests_checked}
+                    >
+                </label>
+
+                <label
+                    class="dashboard-module-option"
+                    for="career-statistics-toggle"
+                >
+                    <span class="dashboard-module-name">
+                        Career Statistics
+                    </span>
+
+                    <input
+                        id="career-statistics-toggle"
+                        class="dashboard-module-toggle"
+                        type="checkbox"
+                        role="switch"
+                        data-setting-name="career_statistics_visible"
+                        data-panel-id="career-statistics-panel"
+                        {career_statistics_checked}
+                    >
+                </label>
+
+                <label
+                    class="dashboard-module-option"
+                    for="launch-controls-toggle"
+                >
+                    <span class="dashboard-module-name">
+                        Play Donkey Kong
+                    </span>
+
+                    <input
+                        id="launch-controls-toggle"
+                        class="dashboard-module-toggle"
+                        type="checkbox"
+                        role="switch"
+                        data-setting-name="launch_controls_visible"
+                        data-panel-id="launch-controls-panel"
+                        {launch_controls_checked}
+                    >
+                </label>
+
+                <label
+                    class="dashboard-module-option"
+                    for="live-session-toggle"
+                >
+                    <span class="dashboard-module-name">
+                        Live Session
+                    </span>
+
+                    <input
+                        id="live-session-toggle"
+                        class="dashboard-module-toggle"
+                        type="checkbox"
+                        role="switch"
+                        data-setting-name="live_session_visible"
+                        data-panel-id="live-session-module"
+                        {live_session_checked}
+                    >
+                </label>
+            </div>
+
+            <div class="dashboard-customization-actions">
+                <button
+                    id="dashboard-restore-defaults-button"
+                    class="dashboard-customize-button"
+                    type="button"
+                >
+                    Restore Defaults
+                </button>
+            </div>
+        </section>
+
+        <section
+            id="launch-controls-panel"
+            class="panel dashboard-module"
             aria-labelledby="launch-heading"
+            {launch_controls_hidden}
         >
             <h2
                 id="launch-heading"
@@ -2313,12 +2661,17 @@ def build_dashboard_html() -> str:
             </div>
         </section>
 
-        <section
-            id="live-panel"
-            class="panel live-panel"
-            aria-labelledby="live-heading"
-            aria-live="polite"
+        <div
+            id="live-session-module"
+            class="dashboard-module"
+            {live_session_hidden}
         >
+            <section
+                id="live-panel"
+                class="panel live-panel"
+                aria-labelledby="live-heading"
+                aria-live="polite"
+            >
             <div class="live-header">
                 <div class="live-title-group">
                     <h2
@@ -2432,17 +2785,20 @@ def build_dashboard_html() -> str:
                 </article>
             </div>
 
-            <p
-                id="live-message"
-                class="live-message"
-            >
-                Live tracked session in progress.
-            </p>
-        </section>
+                <p
+                    id="live-message"
+                    class="live-message"
+                >
+                    Live tracked session in progress.
+                </p>
+            </section>
+        </div>
 
         <section
-            class="metric-grid"
+            id="career-statistics-panel"
+            class="metric-grid dashboard-module"
             aria-label="Career statistics"
+            {career_statistics_hidden}
         >
             <article class="metric-card">
                 <p class="metric-label">
@@ -2689,7 +3045,11 @@ def build_dashboard_html() -> str:
             </article>
         </section>
 
-        <section class="panel personal-bests">
+        <section
+            id="personal-bests-panel"
+            class="panel personal-bests dashboard-module"
+            {personal_bests_hidden}
+        >
             <h2 class="panel-heading">
                 Personal Bests
             </h2>
@@ -2758,7 +3118,11 @@ def build_dashboard_html() -> str:
             </div>
         </section>
 
-        <section class="panel performance-history">
+        <section
+            id="performance-history-panel"
+            class="panel performance-history dashboard-module"
+            {performance_history_hidden}
+        >
             <h2 class="panel-heading">
                 Performance History
             </h2>
@@ -2776,7 +3140,11 @@ def build_dashboard_html() -> str:
             </div>
         </section>
 
-        <section class="panel recent-sessions">
+        <section
+            id="recent-sessions-panel"
+            class="panel recent-sessions dashboard-module"
+            {recent_sessions_hidden}
+        >
             <h2 class="panel-heading">
                 Recent Sessions
             </h2>
@@ -2807,6 +3175,26 @@ def build_dashboard_html() -> str:
         const untrackedButton =
             document.getElementById(
                 "untracked-button"
+            );
+
+        const dashboardCustomizeButton =
+            document.getElementById(
+                "dashboard-customize-button"
+            );
+
+        const dashboardCustomizationPanel =
+            document.getElementById(
+                "dashboard-customization-panel"
+            );
+
+        const dashboardRestoreDefaultsButton =
+            document.getElementById(
+                "dashboard-restore-defaults-button"
+            );
+
+        const dashboardModuleToggles =
+            document.querySelectorAll(
+                ".dashboard-module-toggle"
             );
 
         const statusIndicator =
@@ -2878,6 +3266,201 @@ def build_dashboard_html() -> str:
             );
 
         let previousState = null;
+
+        function toggleDashboardCustomization() {{
+            const panelIsOpen =
+                !dashboardCustomizationPanel.hidden;
+
+            dashboardCustomizationPanel.hidden =
+                panelIsOpen;
+
+            dashboardCustomizeButton.setAttribute(
+                "aria-expanded",
+                String(!panelIsOpen)
+            );
+
+            dashboardCustomizeButton.textContent =
+                panelIsOpen
+                    ? "Customize Dashboard"
+                    : "Close Customization";
+        }}
+
+        async function saveDashboardModuleVisibility(
+            toggle
+        ) {{
+            const settingName =
+                toggle.dataset.settingName;
+
+            const panelId =
+                toggle.dataset.panelId;
+
+            const panel =
+                document.getElementById(
+                    panelId
+                );
+
+            if (!settingName || !panel) {{
+                return;
+            }}
+
+            const previousVisible =
+                !panel.hidden;
+
+            const requestedVisible =
+                toggle.checked;
+
+            panel.hidden =
+                !requestedVisible;
+
+            toggle.disabled = true;
+
+            try {{
+                const response = await fetch(
+                    "/dashboard/settings",
+                    {{
+                        method: "POST",
+                        headers: {{
+                            "Content-Type":
+                                "application/json",
+                        }},
+                        body: JSON.stringify(
+                            {{
+                                [settingName]:
+                                    requestedVisible,
+                            }}
+                        ),
+                    }}
+                );
+
+                const result =
+                    await response.json();
+
+                if (!response.ok) {{
+                    throw new Error(
+                        result.message
+                        || "Dashboard settings "
+                        + "could not be saved."
+                    );
+                }}
+
+            }} catch (error) {{
+                toggle.checked =
+                    previousVisible;
+
+                panel.hidden =
+                    !previousVisible;
+
+                window.alert(
+                    error.message
+                    || "Dashboard settings "
+                    + "could not be saved."
+                );
+
+            }} finally {{
+                toggle.disabled = false;
+            }}
+        }}
+
+        async function restoreDashboardDefaults() {{
+            const previousButtonText =
+                dashboardRestoreDefaultsButton.textContent;
+
+            dashboardRestoreDefaultsButton.disabled =
+                true;
+
+            dashboardRestoreDefaultsButton.textContent =
+                "Restoring...";
+
+            dashboardModuleToggles.forEach(
+                (toggle) => {{
+                    toggle.disabled = true;
+                }}
+            );
+
+            try {{
+                const response = await fetch(
+                    "/dashboard/settings/reset",
+                    {{
+                        method: "POST",
+                        headers: {{
+                            "Content-Type":
+                                "application/json",
+                        }},
+                        body: JSON.stringify({{}}),
+                    }}
+                );
+
+                const result =
+                    await response.json();
+
+                if (!response.ok) {{
+                    throw new Error(
+                        result.message
+                        || "Dashboard defaults "
+                        + "could not be restored."
+                    );
+                }}
+
+                dashboardModuleToggles.forEach(
+                    (toggle) => {{
+                        const settingName =
+                            toggle.dataset.settingName;
+
+                        const panelId =
+                            toggle.dataset.panelId;
+
+                        const panel =
+                            document.getElementById(
+                                panelId
+                            );
+
+                        if (
+                            !settingName
+                            || !panel
+                            || !result.settings
+                            || typeof (
+                                result.settings[
+                                    settingName
+                                ]
+                            ) !== "boolean"
+                        ) {{
+                            return;
+                        }}
+
+                        const settingValue =
+                            result.settings[
+                                settingName
+                            ];
+
+                        toggle.checked =
+                            settingValue;
+
+                        panel.hidden =
+                            !settingValue;
+                    }}
+                );
+
+            }} catch (error) {{
+                window.alert(
+                    error.message
+                    || "Dashboard defaults "
+                    + "could not be restored."
+                );
+
+            }} finally {{
+                dashboardRestoreDefaultsButton.disabled =
+                    false;
+
+                dashboardRestoreDefaultsButton.textContent =
+                    previousButtonText;
+
+                dashboardModuleToggles.forEach(
+                    (toggle) => {{
+                        toggle.disabled = false;
+                    }}
+                );
+            }}
+        }}
 
         function setButtonsDisabled(
             disabled
@@ -3310,6 +3893,27 @@ def build_dashboard_html() -> str:
             }}
         }}
 
+        dashboardCustomizeButton.addEventListener(
+            "click",
+            toggleDashboardCustomization
+        );
+
+        dashboardRestoreDefaultsButton.addEventListener(
+            "click",
+            restoreDashboardDefaults
+        );
+
+        dashboardModuleToggles.forEach(
+            (toggle) => {{
+                toggle.addEventListener(
+                    "change",
+                    () => saveDashboardModuleVisibility(
+                        toggle
+                    )
+                );
+            }}
+        );
+
         trackedButton.addEventListener(
             "click",
             () => requestLaunch(
@@ -3505,6 +4109,10 @@ class DashboardRequestHandler(
                 self.launch_tracked_game,
             "/launch/untracked":
                 self.launch_untracked_game,
+            "/dashboard/settings":
+                self.save_dashboard_preferences,
+            "/dashboard/settings/reset":
+                self.restore_dashboard_defaults,
             "/session/exclude":
                 self.exclude_session,
         }
@@ -3646,6 +4254,221 @@ class DashboardRequestHandler(
 
         self.send_json(
             get_live_session_state()
+        )
+
+    def save_dashboard_preferences(self) -> None:
+        """
+        Save dashboard module visibility preferences.
+        """
+
+        try:
+            content_length = int(
+                self.headers.get(
+                    "Content-Length",
+                    "0",
+                )
+            )
+
+            request_body = self.rfile.read(
+                content_length
+            )
+
+            payload = json.loads(
+                request_body.decode("utf-8")
+            )
+
+        except (
+            ValueError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+        ):
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "The dashboard settings "
+                        "request was invalid."
+                    ),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        if not isinstance(payload, dict):
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "Dashboard settings must "
+                        "be a JSON object."
+                    ),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        allowed_settings = {
+            "launch_controls_visible",
+            "live_session_visible",
+            "career_statistics_visible",
+            "personal_bests_visible",
+            "performance_history_visible",
+            "recent_sessions_visible",
+        }
+
+        supplied_settings = (
+            set(payload)
+            & allowed_settings
+        )
+
+        if not supplied_settings:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "No recognized dashboard "
+                        "setting was provided."
+                    ),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        for setting_name in supplied_settings:
+            if not isinstance(
+                payload[setting_name],
+                bool,
+            ):
+                self.send_json(
+                    {
+                        "success": False,
+                        "message": (
+                            f"{setting_name} must "
+                            "be true or false."
+                        ),
+                    },
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+
+        current_settings = (
+            load_dashboard_settings()
+        )
+
+        updated_values = {
+            "launch_controls_visible": (
+                current_settings
+                .launch_controls_visible
+            ),
+            "live_session_visible": (
+                current_settings
+                .live_session_visible
+            ),
+            "career_statistics_visible": (
+                current_settings
+                .career_statistics_visible
+            ),
+            "personal_bests_visible": (
+                current_settings
+                .personal_bests_visible
+            ),
+            "performance_history_visible": (
+                current_settings
+                .performance_history_visible
+            ),
+            "recent_sessions_visible": (
+                current_settings
+                .recent_sessions_visible
+            ),
+        }
+
+        for setting_name in supplied_settings:
+            updated_values[setting_name] = (
+                payload[setting_name]
+            )
+
+        settings = DashboardSettings(
+            **updated_values
+        )
+
+        try:
+            save_dashboard_settings(settings)
+
+        except OSError as error:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "Dashboard settings could "
+                        "not be saved."
+                    ),
+                    "details": str(error),
+                },
+                status=(
+                    HTTPStatus.INTERNAL_SERVER_ERROR
+                ),
+            )
+            return
+
+        self.send_json(
+            {
+                "success": True,
+                "settings": updated_values,
+            }
+        )
+
+    def restore_dashboard_defaults(self) -> None:
+        """
+        Restore default dashboard module visibility.
+        """
+
+        settings = DashboardSettings()
+
+        default_values = {
+            "launch_controls_visible": (
+                settings.launch_controls_visible
+            ),
+            "live_session_visible": (
+                settings.live_session_visible
+            ),
+            "career_statistics_visible": (
+                settings.career_statistics_visible
+            ),
+            "personal_bests_visible": (
+                settings.personal_bests_visible
+            ),
+            "performance_history_visible": (
+                settings.performance_history_visible
+            ),
+            "recent_sessions_visible": (
+                settings.recent_sessions_visible
+            ),
+        }
+
+        try:
+            save_dashboard_settings(settings)
+
+        except OSError as error:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "Dashboard defaults could "
+                        "not be restored."
+                    ),
+                    "details": str(error),
+                },
+                status=(
+                    HTTPStatus.INTERNAL_SERVER_ERROR
+                ),
+            )
+            return
+
+        self.send_json(
+            {
+                "success": True,
+                "settings": default_values,
+            }
         )
 
     def launch_tracked_game(self) -> None:

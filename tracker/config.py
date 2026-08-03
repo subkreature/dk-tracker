@@ -60,9 +60,28 @@ def get_user_data_folder() -> Path:
 
 USER_DATA_FOLDER = get_user_data_folder()
 CONFIG_FILE = USER_DATA_FOLDER / "config.json"
+DASHBOARD_SETTINGS_FILE = (
+    USER_DATA_FOLDER
+    / "dashboard-settings.json"
+)
 DATA_FOLDER = USER_DATA_FOLDER / "data"
 SESSIONS_FOLDER = DATA_FOLDER / "sessions"
 SESSION_HISTORY_FILE = DATA_FOLDER / "sessions.csv"
+
+
+@dataclass(frozen=True)
+class DashboardSettings:
+    """
+    Store user-selected dashboard preferences.
+    """
+
+    launch_controls_visible: bool = True
+    live_session_visible: bool = True
+    career_statistics_visible: bool = True
+    personal_bests_visible: bool = True
+    performance_history_visible: bool = True
+    recent_sessions_visible: bool = True
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -144,6 +163,98 @@ def save_config(
         + "\n",
         encoding="utf-8",
     )
+
+
+def load_dashboard_settings() -> DashboardSettings:
+    """
+    Load saved dashboard preferences.
+
+    Missing or invalid settings return defaults.
+    """
+
+    if not DASHBOARD_SETTINGS_FILE.exists():
+        return DashboardSettings()
+
+    try:
+        raw_data = json.loads(
+            DASHBOARD_SETTINGS_FILE.read_text(
+                encoding="utf-8"
+            )
+        )
+
+    except (
+        OSError,
+        json.JSONDecodeError,
+    ):
+        return DashboardSettings()
+
+    if not isinstance(raw_data, dict):
+        return DashboardSettings()
+
+    defaults = DashboardSettings()
+
+    def read_boolean(
+        setting_name: str,
+    ) -> bool:
+        default_value = getattr(
+            defaults,
+            setting_name,
+        )
+
+        saved_value = raw_data.get(
+            setting_name,
+            default_value,
+        )
+
+        return (
+            saved_value
+            if isinstance(saved_value, bool)
+            else default_value
+        )
+
+    return DashboardSettings(
+        launch_controls_visible=read_boolean(
+            "launch_controls_visible"
+        ),
+        live_session_visible=read_boolean(
+            "live_session_visible"
+        ),
+        career_statistics_visible=read_boolean(
+            "career_statistics_visible"
+        ),
+        personal_bests_visible=read_boolean(
+            "personal_bests_visible"
+        ),
+        performance_history_visible=read_boolean(
+            "performance_history_visible"
+        ),
+        recent_sessions_visible=read_boolean(
+            "recent_sessions_visible"
+        ),
+    )
+
+
+def save_dashboard_settings(
+    settings: DashboardSettings,
+) -> None:
+    """
+    Save dashboard preferences as formatted JSON.
+    """
+
+    USER_DATA_FOLDER.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    DASHBOARD_SETTINGS_FILE.write_text(
+        json.dumps(
+            asdict(settings),
+            indent=4,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
 
 def validate_config(
     config: AppConfig,
