@@ -184,14 +184,6 @@ def main() -> None:
         )
 
         app_api.set_window(window)
-        window = webview.create_window(
-            "Jungle Gym",
-            dashboard_url,
-            width=1100,
-            height=850,
-            min_size=(800, 650),
-            js_api=app_api,
-        )
         webview.start()
 
     finally:
