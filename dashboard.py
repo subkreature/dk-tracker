@@ -11,11 +11,6 @@ from tracker.config import (
     save_config,
     validate_config,
 )
-from tracker.config import (
-    AppConfig,
-    save_config,
-    validate_config,
-)
 
 from tracker.web import (
     HOST,
@@ -32,6 +27,8 @@ def run_server(
     """
 
     server.serve_forever()
+
+
 class AppApi:
     """
     Expose native desktop actions to the dashboard.
@@ -78,6 +75,7 @@ class AppApi:
             return ""
 
         return str(selected_files[0])
+
     def save_setup(
         self,
         mame_executable: str,
@@ -106,6 +104,7 @@ class AppApi:
             "success": True,
             "problems": [],
         }
+
     def choose_rom_file(self) -> str:
         """
         Open a native picker for dkong.zip.
@@ -131,6 +130,7 @@ class AppApi:
             return ""
 
         return str(selected_files[0])
+
 
 def main() -> None:
     """

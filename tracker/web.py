@@ -828,6 +828,11 @@ def load_dashboard_data() -> tuple[
     and the date the career high was first achieved.
     """
 
+    SESSIONS_FOLDER.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     career = load_career(
         SESSIONS_FOLDER
     )

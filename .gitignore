@@ -19,3 +19,10 @@ sta/
 # MAME handoff files
 score_path.txt
 events_path.txt
+
+# Local packaging environment
+.venv-packaging/
+
+# PyInstaller build output
+build/
+dist/
