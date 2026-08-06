@@ -6,6 +6,7 @@ from tracker.live import (
 from tracker.config import (
     DashboardSettings,
     SESSIONS_FOLDER,
+    USER_DATA_FOLDER,
     load_config,
     load_dashboard_settings,
     save_dashboard_settings,
@@ -13,6 +14,9 @@ from tracker.config import (
 )
 from tracker.setup_page import (
     build_setup_page,
+)
+from tracker.support_page import (
+    build_support_page,
 )
 from tracker.personal_best import (
     build_personal_bests,
@@ -33,7 +37,10 @@ from http.server import (
     ThreadingHTTPServer,
 )
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -1458,11 +1465,16 @@ def build_dashboard_html() -> str:
 
         .header-actions {{
             display: flex;
+            flex-wrap: wrap;
             justify-content: center;
+            gap: 12px;
             margin-top: 20px;
         }}
 
         .dashboard-customize-button {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             padding: 10px 16px;
             border:
                 2px solid
@@ -1482,6 +1494,7 @@ def build_dashboard_html() -> str:
             font-weight: 800;
             letter-spacing: 0.1em;
             text-transform: uppercase;
+            text-decoration: none;
             cursor: pointer;
             box-shadow:
                 0 0 0 2px #000000,
@@ -2454,6 +2467,13 @@ def build_dashboard_html() -> str:
                 >
                     Customize Dashboard
                 </button>
+
+                <a
+                    class="dashboard-customize-button"
+                    href="/support"
+                >
+                    Support &amp; Diagnostics
+                </a>
             </div>
         </header>
 
@@ -4064,6 +4084,41 @@ def build_not_found_html(
     )
 
 
+def open_folder(
+    folder_path: Path,
+) -> None:
+    """
+    Open a folder in the platform's file manager.
+    """
+
+    folder_path.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    if sys.platform == "darwin":
+        subprocess.Popen(
+            [
+                "open",
+                str(folder_path),
+            ]
+        )
+        return
+
+    if os.name == "nt":
+        os.startfile(
+            str(folder_path)
+        )
+        return
+
+    subprocess.Popen(
+        [
+            "xdg-open",
+            str(folder_path),
+        ]
+    )
+
+
 # ---------------------------------------------------------
 # HTTP request handling
 # ---------------------------------------------------------
@@ -4081,16 +4136,21 @@ class DashboardRequestHandler(
         )
 
         routes = {
-    "/": self.serve_dashboard,
-    "/index.html":
-        self.serve_dashboard,
-    "/session":
-        self.serve_session,
-    "/status":
-        self.serve_status,
-    "/live":
-        self.serve_live,
-}
+            "/":
+                self.serve_dashboard,
+            "/index.html":
+                self.serve_dashboard,
+            "/session":
+                self.serve_session,
+            "/support":
+                self.serve_support,
+            "/support/open-data":
+                self.serve_open_data_folder,
+            "/status":
+                self.serve_status,
+            "/live":
+                self.serve_live,
+        }
 
         route_handler = routes.get(
             requested_path
@@ -4160,6 +4220,45 @@ class DashboardRequestHandler(
 
         self.send_html(
             build_dashboard_html()
+        )
+
+    def serve_support(self) -> None:
+        """
+        Serve read-only support diagnostics.
+        """
+
+        self.send_html(
+            build_support_page()
+        )
+
+    def serve_open_data_folder(self) -> None:
+        """
+        Open Jungle Gym's user-data folder.
+        """
+
+        try:
+            open_folder(
+                USER_DATA_FOLDER
+            )
+
+        except OSError as error:
+            self.send_html(
+                build_error_html(
+                    title="Data folder unavailable",
+                    message=(
+                        "Jungle Gym could not open "
+                        "the user-data folder."
+                    ),
+                    details=str(error),
+                ),
+                status=(
+                    HTTPStatus.INTERNAL_SERVER_ERROR
+                ),
+            )
+            return
+
+        self.send_html(
+            build_support_page()
         )
 
     def serve_session(self) -> None:
