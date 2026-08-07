@@ -128,20 +128,91 @@ def build_support_page() -> str:
         else None
     )
 
-    operating_system_parts = [
-        platform.system(),
-        platform.release(),
-        platform.machine(),
-    ]
+    system_name = platform.system()
+    system_release = platform.release()
+    machine = platform.machine()
 
-    operating_system = " · ".join(
-        part
-        for part in operating_system_parts
-        if part
-    )
+    if system_name == "Darwin":
+        macos_version = platform.mac_ver()[0]
+
+        if machine.lower() in {
+            "arm64",
+            "aarch64",
+        }:
+            architecture = (
+                "Apple Silicon (arm64)"
+            )
+
+        elif machine.lower() in {
+            "x86_64",
+            "amd64",
+        }:
+            architecture = (
+                "Intel (x86_64)"
+            )
+
+        else:
+            architecture = (
+                machine
+                or "Unknown architecture"
+            )
+
+        operating_system = " · ".join(
+            [
+                (
+                    f"macOS {macos_version}"
+                    if macos_version
+                    else "macOS"
+                ),
+                architecture,
+            ]
+        )
+
+    elif system_name == "Windows":
+        windows_version = (
+            platform.win32_ver()[0]
+            or system_release
+        )
+
+        operating_system = " · ".join(
+            part
+            for part in [
+                (
+                    f"Windows {windows_version}"
+                    if windows_version
+                    else "Windows"
+                ),
+                machine,
+            ]
+            if part
+        )
+
+    else:
+        operating_system = " · ".join(
+            part
+            for part in [
+                system_name,
+                system_release,
+                machine,
+            ]
+            if part
+        )
 
     if not operating_system:
         operating_system = "Unknown"
+
+    technical_platform = " · ".join(
+        part
+        for part in [
+            system_name,
+            system_release,
+            machine,
+        ]
+        if part
+    )
+
+    if not technical_platform:
+        technical_platform = "Unknown"
 
     plugin_version = read_plugin_version(
         PROJECT_PLUGIN
@@ -284,6 +355,7 @@ def build_support_page() -> str:
                 f"(Build {APP_BUILD})"
             ),
             f"Operating system: {operating_system}",
+            f"Kernel/platform: {technical_platform}",
             (
                 "Python runtime: "
                 f"{platform.python_version()}"
