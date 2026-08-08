@@ -80,8 +80,8 @@ fully validated.
 The current macOS release is not code-signed or notarized. macOS may
 display an additional security warning before allowing it to open.
 
-A detailed installation and troubleshooting guide will be available
-in `docs/INSTALL-macOS.md`.
+See the [macOS installation and troubleshooting guide](docs/INSTALL-macOS.md)
+for detailed setup instructions.
 
 ## Playing with tracking
 
@@ -150,7 +150,14 @@ Jungle Gym is designed to operate locally.
 - Diagnostic reports are copied only when the user explicitly presses
   **Copy Diagnostics**.
 
-A fuller privacy statement will be maintained in `PRIVACY.md`.
+See the [Privacy Policy](PRIVACY.md) for additional details.
+
+## Documentation
+
+- [macOS Installation Guide](docs/INSTALL-macOS.md)
+- [Privacy Policy](PRIVACY.md)
+- [Legal Notice](LEGAL.md)
+- [Changelog](CHANGELOG.md)
 
 ## Development and collaboration
 
