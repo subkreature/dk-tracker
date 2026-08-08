@@ -1078,7 +1078,7 @@ def build_session_page(
     </main>
 
     <script
-        src="https://cdn.jsdelivr.net/npm/chart.js"
+        src="/static/chart.umd.min.js"
     ></script>
 
     <script>

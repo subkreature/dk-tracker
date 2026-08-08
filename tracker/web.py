@@ -66,6 +66,13 @@ PORT = 5000
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+CHART_JS_FILE = (
+    PROJECT_ROOT
+    / "vendor"
+    / "chartjs"
+    / "chart.umd.min.js"
+)
+
 
 # ---------------------------------------------------------
 # Launch state
@@ -4146,6 +4153,8 @@ class DashboardRequestHandler(
                 self.serve_support,
             "/support/open-data":
                 self.serve_open_data_folder,
+            "/static/chart.umd.min.js":
+                self.serve_chart_js,
             "/status":
                 self.serve_status,
             "/live":
@@ -4220,6 +4229,15 @@ class DashboardRequestHandler(
 
         self.send_html(
             build_dashboard_html()
+        )
+
+    def serve_chart_js(self) -> None:
+        """
+        Serve the bundled Chart.js browser build.
+        """
+
+        self.send_javascript(
+            CHART_JS_FILE
         )
 
     def serve_support(self) -> None:
@@ -4740,6 +4758,58 @@ class DashboardRequestHandler(
         self.send_header(
             "Content-Type",
             "text/html; charset=utf-8",
+        )
+
+        self.send_header(
+            "Content-Length",
+            str(len(response_body)),
+        )
+
+        self.send_header(
+            "Cache-Control",
+            "no-store",
+        )
+
+        self.end_headers()
+        self.wfile.write(response_body)
+
+    def send_javascript(
+        self,
+        file_path: Path,
+    ) -> None:
+        """
+        Send a local JavaScript file.
+        """
+
+        try:
+            response_body = file_path.read_bytes()
+
+        except OSError as error:
+            response_body = (
+                "console.error("
+                + json.dumps(
+                    (
+                        "Jungle Gym could not load "
+                        f"Chart.js: {error}"
+                    )
+                )
+                + ");"
+            ).encode(
+                "utf-8"
+            )
+
+            self.send_response(
+                HTTPStatus.NOT_FOUND.value
+            )
+
+        else:
+            self.send_response(
+                HTTPStatus.OK.value
+            )
+
+        self.send_header(
+            "Content-Type",
+            "application/javascript; charset=utf-8",
         )
 
         self.send_header(

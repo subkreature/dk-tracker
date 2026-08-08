@@ -14,6 +14,14 @@ a = Analysis(
             'assets/Credits.html',
             '.',
         ),
+        (
+            'vendor/chartjs/chart.umd.min.js',
+            'vendor/chartjs',
+        ),
+        (
+            'vendor/chartjs/LICENSE.md',
+            'vendor/chartjs',
+        ),
     ],
     hiddenimports=[],
     hookspath=[],
