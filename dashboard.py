@@ -35,7 +35,7 @@ class AppApi:
     """
 
     def __init__(self) -> None:
-        self.window: webview.Window | None = None
+        self._window: webview.Window | None = None
 
     def set_window(
         self,
@@ -45,7 +45,7 @@ class AppApi:
         Store the native DK Tracker window.
         """
 
-        self.window = window
+        self._window = window
 
     def ping(self) -> str:
         """
@@ -61,11 +61,11 @@ class AppApi:
         Return an empty string when the user cancels.
         """
 
-        if self.window is None:
+        if self._window is None:
             return ""
 
         selected_files = (
-            self.window.create_file_dialog(
+            self._window.create_file_dialog(
                 webview.FileDialog.OPEN,
                 allow_multiple=False,
             )
@@ -112,11 +112,11 @@ class AppApi:
         Return an empty string when the user cancels.
         """
 
-        if self.window is None:
+        if self._window is None:
             return ""
 
         selected_files = (
-            self.window.create_file_dialog(
+            self._window.create_file_dialog(
                 webview.FileDialog.OPEN,
                 allow_multiple=False,
                 file_types=(
