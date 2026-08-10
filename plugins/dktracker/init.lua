@@ -207,11 +207,27 @@ function dktracker.startplugin()
     local stop_subscription = nil
 
     ------------------------------------------------------
+    -- MAME API compatibility
+    ------------------------------------------------------
+
+    local function current_machine()
+        if type(manager.machine) == "function" then
+            return manager:machine()
+        end
+
+        return manager.machine
+    end
+
+    ------------------------------------------------------
     -- Timing
     ------------------------------------------------------
 
     local function current_emulated_time()
-        return manager.machine.time:as_double()
+        if type(emu.time) == "function" then
+            return emu.time()
+        end
+
+        return current_machine().time:as_double()
     end
 
     local function elapsed_seconds()
@@ -571,7 +587,7 @@ function dktracker.startplugin()
 
     local function read_game_state()
 
-        local machine = manager.machine
+        local machine = current_machine()
         local cpu =
             machine.devices[":maincpu"]
 
@@ -955,13 +971,23 @@ function dktracker.startplugin()
     -- Register callbacks
     ------------------------------------------------------
 
-    frame_subscription =
-        emu.add_machine_frame_notifier(
+    if type(emu.add_machine_frame_notifier) == "function" then
+        frame_subscription =
+            emu.add_machine_frame_notifier(
+                read_game_state
+            )
+    else
+        emu.register_frame(
             read_game_state
         )
+    end
+
+    local stop_notifier =
+        emu.add_machine_stop_notifier
+        or emu.register_stop
 
     stop_subscription =
-        emu.add_machine_stop_notifier(
+        stop_notifier(
             function()
 
                 if bonus_life_pending then

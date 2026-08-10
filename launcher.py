@@ -45,14 +45,6 @@ PROJECT_PLUGIN = (
     PROJECT_FOLDER
     / "plugins"
     / PLUGIN_NAME
-    / "init.lua"
-)
-
-MAME_PLUGIN = (
-    MAME_FOLDER
-    / "plugins"
-    / PLUGIN_NAME
-    / "init.lua"
 )
 
 
@@ -352,7 +344,6 @@ def sync_plugin() -> None:
         MAME_FOLDER
         / "plugins"
         / PLUGIN_NAME
-        / "init.lua"
     )
 
     mame_plugin.parent.mkdir(
@@ -370,9 +361,10 @@ def sync_plugin() -> None:
         )
         return
 
-    shutil.copy2(
+    shutil.copytree(
         PROJECT_PLUGIN,
         mame_plugin,
+        dirs_exist_ok=True,
     )
 
     print("Tracker plugin synchronized.")
@@ -416,10 +408,21 @@ def run_mame(
         tracking_enabled
     )
 
+    run_options = {}
+
+    if hasattr(
+        subprocess,
+        "CREATE_NO_WINDOW",
+    ):
+        run_options["creationflags"] = (
+            subprocess.CREATE_NO_WINDOW
+        )
+
     return subprocess.run(
         command,
         cwd=MAME_FOLDER,
         check=False,
+        **run_options,
     ).returncode
 
 
@@ -511,6 +514,8 @@ def launch_untracked_game() -> LaunchResult:
     print("UNTRACKED PLAY")
     print("No session statistics will be saved.")
     print()
+
+    sync_plugin()
 
     start_time = datetime.now()
 

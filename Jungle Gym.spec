@@ -49,6 +49,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/JungleGym.ico',
 )
 coll = COLLECT(
     exe,
@@ -60,31 +61,33 @@ coll = COLLECT(
     name='Jungle Gym',
 )
 import os
+import sys
 
-icon_path = os.path.abspath(
-    os.path.join(
-        SPECPATH,
-        'assets',
-        'JungleGym.icns',
+if sys.platform == 'darwin':
+    icon_path = os.path.abspath(
+        os.path.join(
+            SPECPATH,
+            'assets',
+            'JungleGym.icns',
+        )
     )
-)
 
-assert os.path.isfile(icon_path), (
-    f'App icon not found: {icon_path}'
-)
+    assert os.path.isfile(icon_path), (
+        f'App icon not found: {icon_path}'
+    )
 
-print(f'Using app icon: {icon_path}')
+    print(f'Using app icon: {icon_path}')
 
-app = BUNDLE(
-    coll,
-    name='Jungle Gym.app',
-    icon=icon_path,
-    bundle_identifier='com.subkreature.junglegym',
-    info_plist={
-        'CFBundleShortVersionString': '0.1.0',
-        'CFBundleVersion': '1',
-        'NSHumanReadableCopyright': (
-            'Copyright © 2026 Subkreature (SK.)'
-        ),
-    },
-)
+    app = BUNDLE(
+        coll,
+        name='Jungle Gym.app',
+        icon=icon_path,
+        bundle_identifier='com.subkreature.junglegym',
+        info_plist={
+            'CFBundleShortVersionString': '0.1.0',
+            'CFBundleVersion': '1',
+            'NSHumanReadableCopyright': (
+                'Copyright © 2026 Subkreature (SK.)'
+            ),
+        },
+    )
