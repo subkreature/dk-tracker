@@ -50,6 +50,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='assets/JungleGym.ico',
+    version='assets/JungleGym.version.txt',
 )
 coll = COLLECT(
     exe,
