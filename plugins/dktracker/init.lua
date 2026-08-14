@@ -72,6 +72,25 @@ local function read_path_file(filename)
     return path
 end
 
+local function resolve_output_path(
+    environment_name,
+    fallback_filename
+)
+    local environment_path =
+        os.getenv(environment_name)
+
+    if
+        environment_path
+        and environment_path ~= ""
+    then
+        return environment_path
+    end
+
+    return read_path_file(
+        fallback_filename
+    )
+end
+
 local function screen_name(screen_type)
     local names = {
         [1] = "barrels",
@@ -104,14 +123,20 @@ function dktracker.startplugin()
     ------------------------------------------------------
 
     local score_path =
-        read_path_file("score_path.txt")
+        resolve_output_path(
+            "JUNGLE_GYM_SCORE_PATH",
+            "score_path.txt"
+        )
 
     if not score_path then
         return
     end
 
     local events_path =
-        read_path_file("events_path.txt")
+        resolve_output_path(
+            "JUNGLE_GYM_EVENTS_PATH",
+            "events_path.txt"
+        )
 
     if not events_path then
         return

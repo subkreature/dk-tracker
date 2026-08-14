@@ -2,7 +2,7 @@
 
 import argparse
 import csv
-import shutil
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -332,7 +332,7 @@ def print_tracker_storage() -> None:
 
 
 def sync_plugin() -> None:
-    """Copy the latest tracker plugin into the MAME plugins folder."""
+    """Confirm that the bundled tracker plugin is available."""
 
     if not PROJECT_PLUGIN.exists():
         raise FileNotFoundError(
@@ -340,34 +340,8 @@ def sync_plugin() -> None:
             f"{PROJECT_PLUGIN}"
         )
 
-    mame_plugin = (
-        MAME_FOLDER
-        / "plugins"
-        / PLUGIN_NAME
-    )
+    print("Tracker plugin ready.")
 
-    mame_plugin.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    if (
-        PROJECT_PLUGIN.resolve()
-        == mame_plugin.resolve()
-    ):
-        print(
-            "Tracker plugin is already "
-            "in the MAME plugins folder."
-        )
-        return
-
-    shutil.copytree(
-        PROJECT_PLUGIN,
-        mame_plugin,
-        dirs_exist_ok=True,
-    )
-
-    print("Tracker plugin synchronized.")
 
 def build_mame_command(
     tracking_enabled: bool,
@@ -382,8 +356,17 @@ def build_mame_command(
     ]
 
     if tracking_enabled:
+        plugin_search_path = ";".join(
+            [
+                str(PROJECT_FOLDER / "plugins"),
+                str(MAME_FOLDER / "plugins"),
+            ]
+        )
+
         command.extend(
             [
+                "-pluginspath",
+                plugin_search_path,
                 "-plugin",
                 PLUGIN_NAME,
             ]
@@ -401,6 +384,7 @@ def build_mame_command(
 
 def run_mame(
     tracking_enabled: bool,
+    environment_variables: dict[str, str] | None = None,
 ) -> int:
     """Launch MAME and return its exit code."""
 
@@ -409,6 +393,13 @@ def run_mame(
     )
 
     run_options = {}
+
+    if environment_variables is not None:
+        environment = os.environ.copy()
+        environment.update(
+            environment_variables
+        )
+        run_options["env"] = environment
 
     if hasattr(
         subprocess,
@@ -580,26 +571,18 @@ def launch_tracked_game() -> LaunchResult:
     print(f"Session folder: {session_folder}")
     print()
 
-    score_path_file = (
-        MAME_FOLDER / "score_path.txt"
-    )
 
-    events_path_file = (
-        MAME_FOLDER / "events_path.txt"
-    )
-
-    score_path_file.write_text(
-        str(score_file.resolve()),
-        encoding="utf-8",
-    )
-
-    events_path_file.write_text(
-        str(event_file.resolve()),
-        encoding="utf-8",
-    )
 
     return_code = run_mame(
-        tracking_enabled=True
+        tracking_enabled=True,
+        environment_variables={
+            "JUNGLE_GYM_SCORE_PATH": str(
+                score_file.resolve()
+            ),
+            "JUNGLE_GYM_EVENTS_PATH": str(
+                event_file.resolve()
+            ),
+        },
     )
 
     end_time = datetime.now()

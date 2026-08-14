@@ -11,6 +11,10 @@ a = Analysis(
             'plugins/dktracker',
         ),
         (
+            'plugins/dktracker/plugin.json',
+            'plugins/dktracker',
+        ),
+        (
             'assets/Credits.html',
             '.',
         ),
