@@ -26,3 +26,4 @@ events_path.txt
 # PyInstaller build output
 build/
 dist/
+installer-output/
