@@ -4,6 +4,8 @@ import csv
 from pathlib import Path
 from typing import Any
 
+from tracker.models import Session
+
 
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
     """
@@ -254,3 +256,118 @@ def build_session_detail(session_directory: Path) -> dict[str, Any]:
         "events": events,
         "board_splits": board_splits,
     }
+
+
+def build_session_detail_from_session(
+    session: Session,
+) -> dict[str, Any]:
+    """
+    Build dashboard-friendly detail data from one logical
+    Jungle Gym session.
+
+    The Session may represent one individual game split from
+    a larger MAME launch. Its score samples and events are
+    already limited to that game and rebased to begin at zero.
+    """
+
+    score_points: list[dict[str, float | int]] = [
+        {
+            "elapsed_seconds": sample.elapsed_seconds,
+            "score": sample.score,
+        }
+        for sample in session.score_samples
+    ]
+
+    events: list[dict[str, Any]] = []
+
+    highest_level = 0
+    highest_board_position = 0
+    lives_lost = 0
+    bonus_lives = 0
+    boards_cleared = 0
+
+    for event in session.events:
+        if (
+            event.level,
+            event.board_position,
+        ) > (
+            highest_level,
+            highest_board_position,
+        ):
+            highest_level = event.level
+            highest_board_position = (
+                event.board_position
+            )
+
+        if event.event == "life_lost":
+            lives_lost += 1
+        elif event.event == "bonus_life":
+            bonus_lives += 1
+        elif event.event == "level_transition":
+            boards_cleared += 1
+
+        events.append(
+            {
+                "elapsed_seconds":
+                    event.elapsed_seconds,
+                "event": event.event,
+                "score": event.score,
+                "level": event.level,
+                "board_position":
+                    event.board_position,
+                "board": format_board(
+                    event.level,
+                    event.board_position,
+                ),
+                "screen_name":
+                    event.screen_name,
+                "lives": event.lives,
+                "details": event.details,
+            }
+        )
+
+    final_score = (
+        score_points[-1]["score"]
+        if score_points
+        else 0
+    )
+
+    duration_candidates = [
+        point["elapsed_seconds"]
+        for point in score_points
+    ]
+
+    duration_candidates.extend(
+        event["elapsed_seconds"]
+        for event in events
+    )
+
+    duration_seconds = max(
+        duration_candidates,
+        default=0.0,
+    )
+
+    board_splits = build_board_splits(
+        events,
+        duration_seconds,
+    )
+
+    return {
+        "session_id": session.session_id,
+        "session_directory": str(
+            session.folder
+        ),
+        "final_score": final_score,
+        "duration_seconds": duration_seconds,
+        "highest_board": format_board(
+            highest_level,
+            highest_board_position,
+        ),
+        "lives_lost": lives_lost,
+        "bonus_lives": bonus_lives,
+        "boards_cleared": boards_cleared,
+        "score_points": score_points,
+        "events": events,
+        "board_splits": board_splits,
+    }
+

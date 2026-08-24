@@ -10,6 +10,10 @@ from tracker.models import (
 )
 
 
+LEGACY_EXCLUSION_MARKER_NAME = ".exclude-from-career"
+GAME_EXCLUSIONS_FOLDER_NAME = ".excluded-games"
+
+
 def read_csv_rows(
     csv_path: Path,
 ) -> list[dict[str, str]]:
@@ -230,6 +234,7 @@ def load_session(
     event_rows = read_csv_rows(events_log)
 
     return Session(
+        session_id=session_path.name,
         folder=session_path,
         score_log=score_log,
         events_log=events_log,
@@ -241,6 +246,307 @@ def load_session(
             event_rows,
             events_log,
         ),
+    )
+
+
+def split_session_into_games(
+    session: Session,
+) -> list[Session]:
+    """
+    Split one legacy MAME-launch session into individual games.
+
+    Each game begins with a game_start event and ends before
+    the next game_start event. Elapsed times are rebased so
+    each returned session begins at zero.
+    """
+
+    game_starts = [
+        event
+        for event in session.events
+        if event.event == "game_start"
+    ]
+
+    games: list[Session] = []
+
+    for index, game_start in enumerate(
+        game_starts
+    ):
+        start_time = game_start.elapsed_seconds
+
+        if index + 1 < len(game_starts):
+            end_time = (
+                game_starts[index + 1]
+                .elapsed_seconds
+            )
+        else:
+            end_time = None
+
+        game_score_samples = [
+            ScoreSample(
+                elapsed_seconds=(
+                    sample.elapsed_seconds
+                    - start_time
+                ),
+                score=sample.score,
+            )
+            for sample in session.score_samples
+            if sample.elapsed_seconds >= start_time
+            and (
+                end_time is None
+                or sample.elapsed_seconds < end_time
+            )
+        ]
+
+        game_events = [
+            GameEvent(
+                elapsed_seconds=(
+                    event.elapsed_seconds
+                    - start_time
+                ),
+                event=event.event,
+                score=event.score,
+                level=event.level,
+                board_position=event.board_position,
+                screen_type=event.screen_type,
+                screen_name=event.screen_name,
+                lives=event.lives,
+                details=event.details,
+            )
+            for event in session.events
+            if event.elapsed_seconds >= start_time
+            and (
+                end_time is None
+                or event.elapsed_seconds < end_time
+            )
+        ]
+
+        has_activity_after_start = (
+            any(
+                sample.elapsed_seconds > 0
+                for sample in game_score_samples
+            )
+            or any(
+                event.elapsed_seconds > 0
+                for event in game_events
+            )
+        )
+
+        if not has_activity_after_start:
+            continue
+
+        games.append(
+            Session(
+                session_id=(
+                    f"{session.session_id}_"
+                    f"{index + 1:02d}"
+                ),
+                folder=session.folder,
+                score_log=session.score_log,
+                events_log=session.events_log,
+                score_samples=game_score_samples,
+                events=game_events,
+            )
+        )
+
+    return games
+
+
+def get_game_exclusion_marker(
+    session: Session,
+) -> Path:
+    """
+    Return the exclusion marker path for one logical game.
+
+    Logical games share a physical MAME-launch folder, so
+    their exclusion markers live in a hidden subfolder inside
+    that launch folder and are named with the full session ID.
+    """
+
+    return (
+        session.folder
+        / GAME_EXCLUSIONS_FOLDER_NAME
+        / session.session_id
+    )
+
+
+def is_game_excluded(
+    session: Session,
+) -> bool:
+    """
+    Return whether one logical game is excluded from career
+    analytics.
+    """
+
+    return get_game_exclusion_marker(
+        session
+    ).is_file()
+
+
+def get_launch_folder_for_session_id(
+    career_path: Path,
+    session_id: str,
+) -> Path:
+    """
+    Return the physical launch folder for one logical game ID.
+
+    Logical IDs use the form:
+    YYYY-MM-DD_HH-MM-SS_NN
+    """
+
+    if Path(session_id).name != session_id:
+        raise ValueError(
+            "The session ID is invalid."
+        )
+
+    parts = session_id.rsplit(
+        "_",
+        maxsplit=1,
+    )
+
+    if (
+        len(parts) != 2
+        or not parts[0]
+        or not parts[1].isdigit()
+        or int(parts[1]) <= 0
+    ):
+        raise ValueError(
+            "The session ID is invalid."
+        )
+
+    return career_path / parts[0]
+
+
+def load_game_session_by_id(
+    career_path: Path,
+    session_id: str,
+) -> Session:
+    """
+    Load one logical game by session ID.
+
+    This intentionally ignores per-game exclusion state so an
+    excluded game can still be resolved and re-included.
+    """
+
+    launch_folder = (
+        get_launch_folder_for_session_id(
+            career_path,
+            session_id,
+        )
+    )
+
+    launch_session = load_session(
+        launch_folder
+    )
+
+    for game_session in split_session_into_games(
+        launch_session
+    ):
+        if game_session.session_id == session_id:
+            return game_session
+
+    raise ValueError(
+        "The requested logical session does not exist."
+    )
+
+
+def set_game_excluded(
+    career_path: Path,
+    session_id: str,
+    excluded: bool,
+) -> Path:
+    """
+    Set one logical game's career-exclusion state.
+
+    Raw telemetry is never changed. Exclusion is represented
+    only by a marker file under .excluded-games.
+    """
+
+    session = load_game_session_by_id(
+        career_path,
+        session_id,
+    )
+
+    marker = get_game_exclusion_marker(
+        session
+    )
+
+    if excluded:
+        marker.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        marker.touch(
+            exist_ok=True
+        )
+    else:
+        if marker.is_file():
+            marker.unlink()
+
+        try:
+            marker.parent.rmdir()
+        except OSError:
+            pass
+
+    return marker
+
+
+def load_excluded_game_sessions(
+    career_path: Path,
+) -> list[Session]:
+    """
+    Load logical games that are individually excluded.
+
+    Legacy whole-launch exclusions are intentionally not
+    expanded here. This helper is only for the new per-game
+    exclusion system used by the History UI.
+    """
+
+    excluded_sessions: list[Session] = []
+
+    for launch_folder in find_session_folders(
+        career_path
+    ):
+        exclusion_folder = (
+            launch_folder
+            / GAME_EXCLUSIONS_FOLDER_NAME
+        )
+
+        if not exclusion_folder.is_dir():
+            continue
+
+        try:
+            marker_files = sorted(
+                marker
+                for marker in exclusion_folder.iterdir()
+                if marker.is_file()
+            )
+        except OSError:
+            continue
+
+        for marker in marker_files:
+            try:
+                session = load_game_session_by_id(
+                    career_path,
+                    marker.name,
+                )
+            except (
+                FileNotFoundError,
+                NotADirectoryError,
+                OSError,
+                ValueError,
+            ):
+                continue
+
+            if is_game_excluded(session):
+                excluded_sessions.append(
+                    session
+                )
+
+    return sorted(
+        excluded_sessions,
+        key=lambda session: session.session_id,
+        reverse=True,
     )
 
 
@@ -279,7 +585,7 @@ def load_career(
 
     for session_folder in session_folders:
         exclusion_marker = (
-            session_folder / ".exclude-from-career"
+            session_folder / LEGACY_EXCLUSION_MARKER_NAME
         )
 
         if exclusion_marker.is_file():
@@ -312,3 +618,107 @@ def load_career(
         failed_sessions=failed_sessions,
         excluded_sessions=excluded_sessions,
     )
+
+
+def load_game_career(
+    career_path: Path,
+) -> Career:
+    """
+    Load career data using one credit/game as one Session.
+
+    Physical folders still represent MAME launches. Each
+    compatible launch is split at game_start boundaries into
+    independent logical sessions.
+
+    Existing launch-level exclusion markers remain supported:
+    if a launch folder contains .exclude-from-career, none of
+    its games are included.
+
+    Individual logical games can also be excluded with marker
+    files stored under .excluded-games inside the launch
+    folder. Each marker is named with the full logical
+    session ID.
+
+    A launch that parses successfully but contains no
+    game_start events is treated as incompatible rather than
+    silently reintroducing the old one-launch-one-session
+    behavior.
+    """
+
+    session_folders = find_session_folders(
+        career_path
+    )
+
+    sessions: list[Session] = []
+    failed_sessions: list[FailedSession] = []
+    excluded_sessions: list[Path] = []
+
+    for session_folder in session_folders:
+        exclusion_marker = (
+            session_folder / LEGACY_EXCLUSION_MARKER_NAME
+        )
+
+        if exclusion_marker.is_file():
+            excluded_sessions.append(
+                session_folder
+            )
+            continue
+
+        try:
+            launch_session = load_session(
+                session_folder
+            )
+
+            game_sessions = (
+                split_session_into_games(
+                    launch_session
+                )
+            )
+
+            if not game_sessions:
+                failed_sessions.append(
+                    FailedSession(
+                        folder=session_folder,
+                        reason=(
+                            "No game_start events were "
+                            "found in this launch."
+                        ),
+                    )
+                )
+                continue
+
+            for game_session in game_sessions:
+                if is_game_excluded(
+                    game_session
+                ):
+                    excluded_sessions.append(
+                        get_game_exclusion_marker(
+                            game_session
+                        )
+                    )
+                    continue
+
+                sessions.append(
+                    game_session
+                )
+
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            ValueError,
+        ) as error:
+            failed_sessions.append(
+                FailedSession(
+                    folder=session_folder,
+                    reason=str(error),
+                )
+            )
+
+    return Career(
+        folder=career_path,
+        sessions=sessions,
+        failed_sessions=failed_sessions,
+        excluded_sessions=excluded_sessions,
+    )
+

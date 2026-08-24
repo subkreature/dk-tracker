@@ -37,6 +37,7 @@ class GameEvent:
 
 @dataclass
 class Session:
+    session_id: str
     folder: Path
     score_log: Path
     events_log: Path

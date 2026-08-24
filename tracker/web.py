@@ -25,7 +25,7 @@ from tracker.session_page import (
     build_session_page,
 )
 from tracker.session_detail import (
-    build_session_detail,
+    build_session_detail_from_session,
 )
 
 import csv
@@ -58,7 +58,11 @@ from tracker.models import (
     CareerSummary,
     SessionSummary,
 )
-from tracker.parser import load_career
+from tracker.parser import (
+    load_excluded_game_sessions,
+    load_game_career,
+    set_game_excluded,
+)
 
 
 HOST = "127.0.0.1"
@@ -830,6 +834,39 @@ def get_live_session_state() -> dict[str, object]:
 # Dashboard data
 # ---------------------------------------------------------
 
+def parse_session_datetime(
+    session_name: str,
+) -> datetime | None:
+    """
+    Parse the launch timestamp from a logical session ID.
+
+    Logical sessions use IDs such as
+    2026-08-23_11-22-55_03. Legacy launch names without a
+    game suffix are also supported.
+    """
+
+    launch_name = session_name
+
+    name_parts = session_name.rsplit(
+        "_",
+        maxsplit=1,
+    )
+
+    if (
+        len(name_parts) == 2
+        and name_parts[1].isdigit()
+    ):
+        launch_name = name_parts[0]
+
+    try:
+        return datetime.strptime(
+            launch_name,
+            "%Y-%m-%d_%H-%M-%S",
+        )
+    except ValueError:
+        return None
+
+
 def load_dashboard_data() -> tuple[
     CareerSummary,
     SessionSummary | None,
@@ -847,7 +884,7 @@ def load_dashboard_data() -> tuple[
         exist_ok=True,
     )
 
-    career = load_career(
+    career = load_game_career(
         SESSIONS_FOLDER
     )
 
@@ -875,13 +912,13 @@ def load_dashboard_data() -> tuple[
     latest_session, latest_session_summary = max(
         session_summaries,
         key=lambda item:
-            item[0].folder.name,
+            item[0].session_id,
     )
 
     dashboard_sessions = sorted(
         (
             (
-                session.folder.name,
+                session.session_id,
                 summary,
             )
             for session, summary in session_summaries
@@ -900,15 +937,14 @@ def load_dashboard_data() -> tuple[
     first_high_score_session = min(
         high_score_sessions,
         key=lambda session:
-            session.folder.name,
+            session.session_id,
     )
 
-    try:
-        achieved_datetime = datetime.strptime(
-            first_high_score_session.folder.name,
-            "%Y-%m-%d_%H-%M-%S",
-        )
+    achieved_datetime = parse_session_datetime(
+        first_high_score_session.session_id
+    )
 
+    if achieved_datetime is not None:
         achieved_hour = (
             achieved_datetime
             .strftime("%I")
@@ -922,16 +958,15 @@ def load_dashboard_data() -> tuple[
             + achieved_hour
             + achieved_datetime.strftime(":%M %p")
         )
-
-    except ValueError:
+    else:
         career_high_achieved = (
-            first_high_score_session.folder.name
+            first_high_score_session.session_id
         )
 
     return (
         career_summary,
         latest_session_summary,
-        latest_session.folder.name,
+        latest_session.session_id,
         career_high_achieved,
         dashboard_sessions,
     )
@@ -939,16 +974,16 @@ def load_dashboard_data() -> tuple[
 
 def get_compatible_session_names() -> list[str]:
     """
-    Return compatible tracked-session names, newest first.
+    Return compatible logical session IDs, newest first.
     """
 
-    career = load_career(
+    career = load_game_career(
         SESSIONS_FOLDER
     )
 
     return sorted(
         (
-            session.folder.name
+            session.session_id
             for session in career.sessions
         ),
         reverse=True,
@@ -1049,6 +1084,17 @@ def build_dashboard_html() -> str:
             dashboard_sessions,
         ) = load_dashboard_data()
 
+        excluded_dashboard_sessions = [
+            (
+                session.session_id,
+                analyze_session(session),
+            )
+            for session
+            in load_excluded_game_sessions(
+                SESSIONS_FOLDER
+            )
+        ]
+
     except (
         FileNotFoundError,
         NotADirectoryError,
@@ -1112,19 +1158,17 @@ def build_dashboard_html() -> str:
     recent_session_rows = []
 
     for session_name, summary in dashboard_sessions[:5]:
-        try:
-            session_datetime = datetime.strptime(
-                session_name,
-                "%Y-%m-%d_%H-%M-%S",
-            )
+        session_datetime = parse_session_datetime(
+            session_name
+        )
 
+        if session_datetime is not None:
             session_date = (
                 session_datetime.strftime("%b ")
                 + str(session_datetime.day)
                 + session_datetime.strftime(", %Y")
             )
-
-        except ValueError:
+        else:
             session_date = session_name
 
         furthest_board = (
@@ -1188,6 +1232,96 @@ def build_dashboard_html() -> str:
         """
     )
 
+    excluded_session_rows = []
+
+    for session_name, summary in excluded_dashboard_sessions:
+        session_datetime = parse_session_datetime(
+            session_name
+        )
+
+        if session_datetime is not None:
+            session_date = (
+                session_datetime.strftime("%b ")
+                + str(session_datetime.day)
+                + session_datetime.strftime(", %Y")
+            )
+        else:
+            session_date = session_name
+
+        furthest_board = (
+            summary.furthest_board
+            or "—"
+        )
+
+        escaped_session_name = escape(
+            session_name,
+            quote=True,
+        )
+
+        excluded_session_rows.append(
+            f"""
+            <article class="recent-session-row">
+                <div class="recent-session-main">
+                    <p class="recent-session-date">
+                        {session_date}
+                    </p>
+
+                    <p class="recent-session-board">
+                        Furthest board:
+                        <span>{furthest_board}</span>
+                    </p>
+                </div>
+
+                <div class="recent-session-actions">
+                    <div class="recent-session-score">
+                        <strong>
+                            {summary.final_score:,}
+                        </strong>
+
+                        <span>
+                            {summary.boards_cleared}
+                            boards cleared
+                        </span>
+                    </div>
+
+                    <button
+                        class="include-session-button"
+                        type="button"
+                        data-session-name="{escaped_session_name}"
+                    >
+                        Include
+                    </button>
+                </div>
+            </article>
+            """
+        )
+
+    if excluded_session_rows:
+        excluded_sessions_html = (
+            """
+            <div class="excluded-sessions-section">
+                <h3 class="excluded-sessions-heading">
+                    Excluded from Career
+                </h3>
+
+                <p class="panel-description">
+                    These games are retained in history but
+                    do not affect career statistics.
+                </p>
+
+                <div class="recent-session-list">
+            """
+            + "\n".join(
+                excluded_session_rows
+            )
+            + """
+                </div>
+            </div>
+            """
+        )
+    else:
+        excluded_sessions_html = ""
+
     performance_sessions = list(
         reversed(
             dashboard_sessions[:12]
@@ -1208,18 +1342,16 @@ def build_dashboard_html() -> str:
     performance_bar_items = []
 
     for session_name, summary in performance_sessions:
-        try:
-            session_datetime = datetime.strptime(
-                session_name,
-                "%Y-%m-%d_%H-%M-%S",
-            )
+        session_datetime = parse_session_datetime(
+            session_name
+        )
 
+        if session_datetime is not None:
             session_label = (
                 session_datetime.strftime("%b ")
                 + str(session_datetime.day)
             )
-
-        except ValueError:
+        else:
             session_label = session_name
 
         bar_height = max(
@@ -2229,6 +2361,57 @@ def build_dashboard_html() -> str:
             opacity: 0.45;
         }}
 
+        .include-session-button {{
+            padding: 8px 10px;
+            border:
+                1px solid
+                var(--bonus-green);
+            border-radius: 6px;
+            background: #001000;
+            color: var(--bonus-green);
+            cursor: pointer;
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            transition:
+                background 120ms ease,
+                color 120ms ease,
+                opacity 120ms ease;
+        }}
+
+        .include-session-button:hover:not(:disabled) {{
+            background: var(--bonus-green);
+            color: #000000;
+        }}
+
+        .include-session-button:disabled {{
+            cursor: not-allowed;
+            opacity: 0.45;
+        }}
+
+        .excluded-sessions-section {{
+            margin-top: 26px;
+            padding-top: 22px;
+            border-top:
+                1px solid
+                rgb(19 243 255 / 0.28);
+        }}
+
+        .excluded-sessions-heading {{
+            margin: 0 0 8px;
+            color: var(--bonus-green);
+            font-family:
+                "Courier New",
+                monospace;
+            font-size: 0.9rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }}
+
         .performance-history {{
             margin-top: 24px;
         }}
@@ -2876,8 +3059,10 @@ def build_dashboard_html() -> str:
                 </p>
 
                 <p class="metric-detail">
-                    {career_summary.skipped_sessions}
-                    legacy session(s) excluded
+                    {career_summary.completed_games}
+                    completed ·
+                    {career_summary.quit_or_incomplete_games}
+                    incomplete
                 </p>
             </article>
 
@@ -3188,6 +3373,8 @@ def build_dashboard_html() -> str:
             <div class="recent-session-list">
                 {recent_sessions_html}
             </div>
+
+            {excluded_sessions_html}
         </section>
 
         {latest_session_link_html}
@@ -3295,6 +3482,11 @@ def build_dashboard_html() -> str:
         const excludeSessionButtons =
             document.querySelectorAll(
                 ".exclude-session-button"
+            );
+
+        const includeSessionButtons =
+            document.querySelectorAll(
+                ".include-session-button"
             );
 
         let previousState = null;
@@ -3862,6 +4054,69 @@ def build_dashboard_html() -> str:
             }}
         }}
 
+        async function includeSession(
+            button
+        ) {{
+            const sessionName =
+                button.dataset.sessionName;
+
+            if (!sessionName) {{
+                return;
+            }}
+
+            const confirmed = window.confirm(
+                "Include this session in "
+                + "career statistics again?"
+            );
+
+            if (!confirmed) {{
+                return;
+            }}
+
+            button.disabled = true;
+            button.textContent = "Including...";
+
+            try {{
+                const response = await fetch(
+                    (
+                        "/session/include?name="
+                        + encodeURIComponent(
+                            sessionName
+                        )
+                    ),
+                    {{
+                        method: "POST",
+                        headers: {{
+                            "Content-Type":
+                                "application/json",
+                        }},
+                    }}
+                );
+
+                const result =
+                    await response.json();
+
+                if (!response.ok) {{
+                    throw new Error(
+                        result.message
+                        || "Include request failed."
+                    );
+                }}
+
+                window.location.reload();
+
+            }} catch (error) {{
+                button.disabled = false;
+                button.textContent = "Include";
+
+                window.alert(
+                    error.message
+                    || "The session could not "
+                    + "be included."
+                );
+            }}
+        }}
+
         async function excludeSession(
             button
         ) {{
@@ -3965,6 +4220,17 @@ def build_dashboard_html() -> str:
                 button.addEventListener(
                     "click",
                     () => excludeSession(
+                        button
+                    )
+                );
+            }}
+        );
+
+        includeSessionButtons.forEach(
+            (button) => {{
+                button.addEventListener(
+                    "click",
+                    () => includeSession(
                         button
                     )
                 );
@@ -4189,6 +4455,8 @@ class DashboardRequestHandler(
                 self.restore_dashboard_defaults,
             "/session/exclude":
                 self.exclude_session,
+            "/session/include":
+                self.include_session,
         }
 
         route_handler = routes.get(
@@ -4281,12 +4549,22 @@ class DashboardRequestHandler(
 
     def serve_session(self) -> None:
         """
-        Serve details for the requested or latest session.
+        Serve details for the requested or latest logical game.
         """
 
         try:
-            session_names = (
-                get_compatible_session_names()
+            career = load_game_career(
+                SESSIONS_FOLDER
+            )
+
+            sessions_by_name = {
+                session.session_id: session
+                for session in career.sessions
+            }
+
+            session_names = sorted(
+                sessions_by_name,
+                reverse=True,
             )
 
             if not session_names:
@@ -4307,7 +4585,7 @@ class DashboardRequestHandler(
             if requested_names:
                 session_name = requested_names[0]
 
-                if session_name not in session_names:
+                if session_name not in sessions_by_name:
                     raise ValueError(
                         "The requested session does not "
                         "exist or is not compatible."
@@ -4315,12 +4593,14 @@ class DashboardRequestHandler(
             else:
                 session_name = session_names[0]
 
-            session_detail = build_session_detail(
-                SESSIONS_FOLDER / session_name
-            )
+            session = sessions_by_name[
+                session_name
+            ]
 
-            career = load_career(
-                SESSIONS_FOLDER
+            session_detail = (
+                build_session_detail_from_session(
+                    session
+                )
             )
 
             career_summary = analyze_career(
@@ -4627,7 +4907,7 @@ class DashboardRequestHandler(
 
     def exclude_session(self) -> None:
         """
-        Exclude one session from career analytics.
+        Exclude one logical game from career analytics.
         """
 
         parsed_url = urlparse(self.path)
@@ -4654,49 +4934,19 @@ class DashboardRequestHandler(
 
         session_name = requested_names[0]
 
-        if (
-            Path(session_name).name
-            != session_name
-        ):
-            self.send_json(
-                {
-                    "success": False,
-                    "message": (
-                        "The session name is invalid."
-                    ),
-                },
-                status=HTTPStatus.BAD_REQUEST,
-            )
-            return
-
-        session_folder = (
-            SESSIONS_FOLDER / session_name
-        )
-
-        if not session_folder.is_dir():
-            self.send_json(
-                {
-                    "success": False,
-                    "message": (
-                        "The requested session "
-                        "does not exist."
-                    ),
-                },
-                status=HTTPStatus.NOT_FOUND,
-            )
-            return
-
-        exclusion_marker = (
-            session_folder
-            / ".exclude-from-career"
-        )
-
         try:
-            exclusion_marker.touch(
-                exist_ok=True
+            set_game_excluded(
+                SESSIONS_FOLDER,
+                session_name,
+                True,
             )
 
-        except OSError as error:
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            ValueError,
+        ) as error:
             self.send_json(
                 {
                     "success": False,
@@ -4706,9 +4956,7 @@ class DashboardRequestHandler(
                     ),
                     "details": str(error),
                 },
-                status=(
-                    HTTPStatus.INTERNAL_SERVER_ERROR
-                ),
+                status=HTTPStatus.BAD_REQUEST,
             )
             return
 
@@ -4717,6 +4965,72 @@ class DashboardRequestHandler(
                 "success": True,
                 "message": (
                     "Session excluded from "
+                    "career statistics."
+                ),
+                "session_name": session_name,
+            }
+        )
+
+    def include_session(self) -> None:
+        """
+        Re-include one logical game in career analytics.
+        """
+
+        parsed_url = urlparse(self.path)
+        query_values = parse_qs(
+            parsed_url.query
+        )
+
+        requested_names = query_values.get(
+            "name",
+            [],
+        )
+
+        if not requested_names:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "No session name was provided."
+                    ),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        session_name = requested_names[0]
+
+        try:
+            set_game_excluded(
+                SESSIONS_FOLDER,
+                session_name,
+                False,
+            )
+
+        except (
+            FileNotFoundError,
+            NotADirectoryError,
+            OSError,
+            ValueError,
+        ) as error:
+            self.send_json(
+                {
+                    "success": False,
+                    "message": (
+                        "The session could not "
+                        "be included."
+                    ),
+                    "details": str(error),
+                },
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        self.send_json(
+            {
+                "success": True,
+                "message": (
+                    "Session included in "
                     "career statistics."
                 ),
                 "session_name": session_name,
