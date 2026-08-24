@@ -348,25 +348,25 @@ def build_mame_command(
 ) -> list[str]:
     """Build the command used to launch Donkey Kong."""
 
+    plugin_search_path = ";".join(
+        [
+            str(PROJECT_FOLDER / "plugins"),
+            str(MAME_FOLDER / "plugins"),
+        ]
+    )
+
     command = [
         str(MAME_EXECUTABLE),
         ROM_NAME,
         "-rompath",
         str(ROM_FOLDER),
+        "-pluginspath",
+        plugin_search_path,
     ]
 
     if tracking_enabled:
-        plugin_search_path = ";".join(
-            [
-                str(PROJECT_FOLDER / "plugins"),
-                str(MAME_FOLDER / "plugins"),
-            ]
-        )
-
         command.extend(
             [
-                "-pluginspath",
-                plugin_search_path,
                 "-plugin",
                 PLUGIN_NAME,
             ]
