@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import argparse
 import csv
 import os
 import subprocess
@@ -343,10 +342,8 @@ def sync_plugin() -> None:
     print("Tracker plugin ready.")
 
 
-def build_mame_command(
-    tracking_enabled: bool,
-) -> list[str]:
-    """Build the command used to launch Donkey Kong."""
+def build_mame_command() -> list[str]:
+    """Build the always-tracked command used to launch Donkey Kong."""
 
     plugin_search_path = ";".join(
         [
@@ -355,42 +352,24 @@ def build_mame_command(
         ]
     )
 
-    command = [
+    return [
         str(MAME_EXECUTABLE),
         ROM_NAME,
         "-rompath",
         str(ROM_FOLDER),
         "-pluginspath",
         plugin_search_path,
+        "-plugin",
+        PLUGIN_NAME,
     ]
-
-    if tracking_enabled:
-        command.extend(
-            [
-                "-plugin",
-                PLUGIN_NAME,
-            ]
-        )
-    else:
-        command.extend(
-            [
-                "-noplugin",
-                PLUGIN_NAME,
-            ]
-        )
-
-    return command
 
 
 def run_mame(
-    tracking_enabled: bool,
     environment_variables: dict[str, str] | None = None,
 ) -> int:
-    """Launch MAME and return its exit code."""
+    """Launch MAME with tracking enabled and return its exit code."""
 
-    command = build_mame_command(
-        tracking_enabled
-    )
+    command = build_mame_command()
 
     run_options = {}
 
@@ -495,42 +474,6 @@ def append_session_history(
 # Launch modes
 # ---------------------------------------------------------
 
-def launch_untracked_game() -> LaunchResult:
-    """Launch Donkey Kong without creating tracker data."""
-
-    print("===================================")
-    print("        Jungle Gym")
-    print("===================================")
-    print()
-    print("UNTRACKED PLAY")
-    print("No session statistics will be saved.")
-    print()
-
-    sync_plugin()
-
-    start_time = datetime.now()
-
-    return_code = run_mame(
-        tracking_enabled=False
-    )
-
-    end_time = datetime.now()
-    duration = end_time - start_time
-
-    print()
-    print("Game finished!")
-    print(f"Ended: {end_time}")
-    print(f"Duration: {duration}")
-    print(f"MAME exit code: {return_code}")
-    print()
-    print("No tracker session was created.")
-
-    return LaunchResult(
-        tracking_enabled=False,
-        return_code=return_code,
-    )
-
-
 def launch_tracked_game() -> LaunchResult:
     """Launch Donkey Kong with telemetry and save a session."""
 
@@ -574,7 +517,6 @@ def launch_tracked_game() -> LaunchResult:
 
 
     return_code = run_mame(
-        tracking_enabled=True,
         environment_variables={
             "JUNGLE_GYM_SCORE_PATH": str(
                 score_file.resolve()
@@ -711,10 +653,17 @@ def launch_game(
     tracking_enabled: bool = True,
 ) -> LaunchResult:
     """
-    Launch Donkey Kong in the requested mode.
+    Launch Donkey Kong with Jungle Gym telemetry enabled.
 
-    This is the function the dashboard will call.
+    The tracking_enabled argument is retained temporarily for
+    compatibility with existing dashboard callers. Untracked
+    launches are no longer supported.
     """
+    if not tracking_enabled:
+        raise ValueError(
+            "Untracked play is no longer supported."
+        )
+
     global SAVED_CONFIG
     global MAME_EXECUTABLE
     global MAME_FOLDER
@@ -736,45 +685,22 @@ def launch_game(
     ROM_FOLDER = ROM_FILE.parent
     validate_mame()
 
-    if tracking_enabled:
-        return launch_tracked_game()
-
-    return launch_untracked_game()
+    return launch_tracked_game()
 
 
 # ---------------------------------------------------------
 # Command-line entry point
 # ---------------------------------------------------------
 
-def parse_arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Launch Donkey Kong through Jungle Gym."
-    )
-
-    parser.add_argument(
-        "--no-tracking",
-        action="store_true",
-        help=(
-            "Launch Donkey Kong without the Jungle Gym "
-            "plugin or session logging."
-        ),
-    )
-
-    return parser.parse_args()
-
-
 def main() -> int:
-    arguments = parse_arguments()
-
     try:
-        result = launch_game(
-            tracking_enabled=not arguments.no_tracking
-        )
+        result = launch_game()
 
     except (
         FileExistsError,
         FileNotFoundError,
         OSError,
+        ValueError,
     ) as error:
         print(error)
         return 1

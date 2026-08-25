@@ -1810,11 +1810,7 @@ def build_dashboard_html() -> str:
 
         .launch-buttons {{
             display: grid;
-            grid-template-columns:
-                repeat(
-                    2,
-                    minmax(0, 1fr)
-                );
+            grid-template-columns: 1fr;
             gap: 14px;
         }}
 
@@ -2826,25 +2822,18 @@ def build_dashboard_html() -> str:
             </h2>
 
             <p class="panel-description">
-                Choose whether this game should be recorded
-                in your Jungle Gym career statistics.
+                Every game is recorded automatically.
+                Individual sessions can be excluded from
+                career statistics afterward.
             </p>
 
             <div class="launch-buttons">
                 <button
-                    id="tracked-button"
+                    id="play-button"
                     class="launch-button primary"
                     type="button"
                 >
-                    Play with Tracking
-                </button>
-
-                <button
-                    id="untracked-button"
-                    class="launch-button"
-                    type="button"
-                >
-                    Play without Tracking
+                    Play Now
                 </button>
             </div>
 
@@ -3386,14 +3375,9 @@ def build_dashboard_html() -> str:
     </main>
 
     <script>
-        const trackedButton =
+        const playButton =
             document.getElementById(
-                "tracked-button"
-            );
-
-        const untrackedButton =
-            document.getElementById(
-                "untracked-button"
+                "play-button"
             );
 
         const dashboardCustomizeButton =
@@ -3689,8 +3673,7 @@ def build_dashboard_html() -> str:
         function setButtonsDisabled(
             disabled
         ) {{
-            trackedButton.disabled = disabled;
-            untrackedButton.disabled = disabled;
+            playButton.disabled = disabled;
         }}
 
         function getStatusDetail(status) {{
@@ -4201,17 +4184,10 @@ def build_dashboard_html() -> str:
             }}
         );
 
-        trackedButton.addEventListener(
+        playButton.addEventListener(
             "click",
             () => requestLaunch(
-                "/launch/tracked"
-            )
-        );
-
-        untrackedButton.addEventListener(
-            "click",
-            () => requestLaunch(
-                "/launch/untracked"
+                "/launch/play"
             )
         );
 
@@ -4445,10 +4421,8 @@ class DashboardRequestHandler(
         )
 
         routes = {
-            "/launch/tracked":
-                self.launch_tracked_game,
-            "/launch/untracked":
-                self.launch_untracked_game,
+            "/launch/play":
+                self.launch_game,
             "/dashboard/settings":
                 self.save_dashboard_preferences,
             "/dashboard/settings/reset":
@@ -4873,30 +4847,14 @@ class DashboardRequestHandler(
             }
         )
 
-    def launch_tracked_game(self) -> None:
+    def launch_game(self) -> None:
         """
-        Start Donkey Kong with telemetry.
+        Start Donkey Kong with telemetry enabled.
         """
 
         response, status = (
             request_game_launch(
                 tracking_enabled=True
-            )
-        )
-
-        self.send_json(
-            response,
-            status=status,
-        )
-
-    def launch_untracked_game(self) -> None:
-        """
-        Start Donkey Kong without telemetry.
-        """
-
-        response, status = (
-            request_game_launch(
-                tracking_enabled=False
             )
         )
 
