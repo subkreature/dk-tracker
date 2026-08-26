@@ -17,42 +17,71 @@
 Jungle Gym is a desktop companion for players of the original arcade
 Donkey Kong through MAME.
 
-It launches the game, installs and activates its bundled telemetry
-plugin, records tracked sessions, and turns those sessions into a
-persistent performance dashboard.
+It launches Donkey Kong, activates its bundled telemetry plugin, records
+gameplay locally, and turns individual games into a persistent career
+dashboard with live telemetry, personal bests, performance history, and
+detailed session views.
 
-Jungle Gym is free, independently developed, and largely vibe-coded
-software.
+Jungle Gym is an unofficial, independently developed fan project.
 
 ## Current status
 
-**Current release:** 0.1.0
+Jungle Gym is currently in **public-beta preparation**.
 
-The current packaged build supports:
+The next planned public build is:
 
-- macOS on Intel (`x86_64`)
-- MAME-based Donkey Kong play
-- Local, single-player career tracking
+```text
+v0.1.0-beta.1
+```
 
-A Windows version is planned and is considered a high priority.
+Windows x64 is the primary release target for the first public beta.
 
-Apple Silicon support has not yet been tested.
+An Intel (`x86_64`) macOS build has also been developed and tested, but
+macOS will receive a final regression pass after the current core
+tracking model is frozen. Apple Silicon has not yet been formally
+tested.
+
+Jungle Gym is still early software. Backing up career data before
+updating between beta builds is recommended.
 
 ## Features
 
-- Launch Donkey Kong directly through Jungle Gym
-- Choose between tracked and untracked games
-- Live score, board, lives, duration, and session telemetry
+- Launch Donkey Kong directly through Jungle Gym with a single
+  **Play Now** button
+- Automatic gameplay tracking on every Jungle Gym launch
+- **One credit / one game = one Jungle Gym session**
+- Live score, board, lives, duration, and gameplay telemetry
 - Persistent career statistics
 - Personal-best tracking
-- Performance history
+- Performance-history visualization
 - Recent-session summaries
 - Detailed individual session pages
-- Session exclusion for tests or unwanted runs
+- Per-game **Exclude from Career** and **Include in Career** controls
+- Retention of excluded game history without deleting raw telemetry
 - Customizable dashboard modules
-- Support and diagnostics page
+- Persistent dashboard preferences
+- Support & Diagnostics page
 - One-click access to the local data folder
-- Shareable diagnostics with home-directory privacy protection
+- Copyable diagnostics with home-directory privacy protection
+- Fully local chart rendering through bundled Chart.js
+
+## How tracking works
+
+Jungle Gym records every game launched through **Play Now**.
+
+A single MAME process can contain several credits. Jungle Gym treats each
+credit as its own logical session, so playing several games before
+closing MAME does not combine those games into one career record.
+
+A game can be excluded from career analytics afterward. Excluding a game:
+
+- removes it from career statistics and performance graphs
+- keeps the underlying gameplay data
+- keeps it visible in the **Excluded from Career** history section
+- allows it to be included again later
+
+Incomplete games can also be retained when real gameplay occurred before
+MAME was closed or the run ended unexpectedly.
 
 ## Requirements
 
@@ -61,147 +90,185 @@ Jungle Gym does **not** include MAME or any game ROMs.
 You must provide:
 
 - A working MAME installation
-- Your own lawful copy of the Donkey Kong ROM
+- Your own lawful copy of the Donkey Kong ROM set
 - A ROM archive named exactly `dkong.zip`
 
-The current macOS build has been tested with an Intel build of
-MAME 0.286. Other MAME versions may work, but have not yet been
-fully validated.
+Development testing has included:
 
-## macOS installation
+- MAME 0.225 on Windows
+- Intel MAME 0.286 on macOS
 
-1. Open the Jungle Gym DMG.
-2. Drag **Jungle Gym.app** onto the **Applications** shortcut.
-3. Open Jungle Gym from the Applications folder.
-4. Select your MAME executable.
-5. Select your existing `dkong.zip` ROM.
-6. Save the setup and continue to the dashboard.
+Other MAME versions may work, but should be considered unverified until
+tested.
 
-The current macOS release is not code-signed or notarized. macOS may
-display an additional security warning before allowing it to open.
+## Installation
 
-See the [macOS installation and troubleshooting guide](docs/INSTALL-macOS.md)
-for detailed setup instructions.
+### Windows
 
-## Playing with tracking
+The first public beta is planned to ship as a Windows x64 installer.
 
-Choose **Play with Tracking** to begin a recorded game.
+See:
 
-Before launching MAME, Jungle Gym:
+[Windows Installation Guide](docs/INSTALL-Windows.md)
 
-1. Verifies the configured MAME and ROM paths.
-2. Copies the bundled Jungle Gym telemetry plugin into MAME's plugin
-   directory.
-3. Creates a new local session folder.
-4. Starts MAME with tracking enabled.
-5. Reads live telemetry while the game is running.
-6. Saves the completed session to the local career history.
+The current Windows build is unsigned, so Windows may display a
+SmartScreen or unknown-publisher warning.
 
-Choose **Play without Tracking** when you want to play without adding
-the game to your Jungle Gym career statistics.
+### macOS
+
+The Intel macOS build is installed from a DMG.
+
+See:
+
+[macOS Installation Guide](docs/INSTALL-macOS.md)
+
+The current macOS build is not code-signed or notarized, so macOS may
+require an additional approval step before first launch.
+
+## First-time setup
+
+When Jungle Gym starts without a valid configuration:
+
+1. Select the MAME executable.
+2. Select your existing `dkong.zip` ROM archive.
+3. Save the configuration.
+4. Confirm that the main dashboard appears.
+5. Open **Support & Diagnostics** and verify the configured files are
+   available.
+
+Jungle Gym does not download MAME or game ROMs.
+
+## MAME integration
+
+Jungle Gym uses its bundled `dktracker` MAME plugin for telemetry.
+
+The current launcher activates the bundled plugin through MAME's plugin
+search path. Jungle Gym does **not** need to copy its plugin into the
+MAME installation before each launch.
+
+Gameplay telemetry paths are supplied to the plugin at launch time and
+stored in Jungle Gym's own user-data directory.
 
 ## Local data
 
-Jungle Gym stores configuration, dashboard preferences, and session
+Jungle Gym stores configuration, dashboard preferences, and gameplay
 history locally.
 
-On macOS, the current data folder is:
+### Windows
+
+```text
+%LOCALAPPDATA%\DK Tracker
+```
+
+### macOS
 
 ```text
 ~/Library/Application Support/DK Tracker
 ```
 
-The older internal folder name is intentionally retained so existing
-users do not lose their historical sessions or settings during the
-Jungle Gym rebrand.
+The older internal folder name `DK Tracker` is intentionally retained so
+existing development installations do not lose historical sessions or
+settings during the Jungle Gym rebrand.
 
-Removing `Jungle Gym.app` does not automatically remove this data.
+Gameplay history is stored beneath the application's `data/sessions`
+folder.
+
+Removing or replacing the Jungle Gym application does not automatically
+mean the separately stored career data has been removed. Back up the
+entire `DK Tracker` data folder before major upgrades while the project
+is in beta.
 
 ## Support and diagnostics
 
-Open **Support & Diagnostics** from the main dashboard to view:
+Open **Support & Diagnostics** from the dashboard to inspect information
+such as:
 
 - Jungle Gym version and build
 - Operating system and architecture
 - Python runtime
-- Tracker plugin version
+- Tracker plugin status
 - MAME executable status
 - Donkey Kong ROM status
 - Local data and session folders
-- Configuration-file status
-- Bundled and installed plugin paths
+- Configuration status
 
 The page can also:
 
-- Open the Jungle Gym data folder
-- Copy a plain-text diagnostic report
+- open the Jungle Gym data folder
+- copy a plain-text diagnostic report
 
 Copied diagnostics replace the local home-directory prefix with `~`
-to avoid exposing the account username when the report is shared.
+where possible to reduce accidental disclosure of the account username.
+Always review a diagnostic report before posting it publicly.
 
 ## Privacy
 
 Jungle Gym is designed to operate locally.
 
-- No account is required.
-- Career and session information is stored on the user's computer.
-- The dashboard server binds to `127.0.0.1`.
-- Configuration files contain local MAME and ROM paths.
-- Diagnostic reports are copied only when the user explicitly presses
-  **Copy Diagnostics**.
+- No Jungle Gym account is required.
+- Normal gameplay tracking does not require a cloud service.
+- Career and session data are stored on the user's computer.
+- The local dashboard server binds to `127.0.0.1`.
+- Jungle Gym does not automatically upload gameplay telemetry to the
+  developer.
+- Diagnostic reports are copied only when the user explicitly requests
+  them.
 
-See the [Privacy Policy](PRIVACY.md) for additional details.
+See the [Privacy Notice](PRIVACY.md) for details.
 
 ## Documentation
 
+- [Windows Installation Guide](docs/INSTALL-Windows.md)
 - [macOS Installation Guide](docs/INSTALL-macOS.md)
-- [Privacy Policy](PRIVACY.md)
+- [Development & Release Handoff](DEVELOPMENT.md)
+- [Privacy Notice](PRIVACY.md)
 - [Legal Notice](LEGAL.md)
 - [Changelog](CHANGELOG.md)
 
 ## Development and collaboration
 
-Jungle Gym is not currently offered under an open-source license.
+The Jungle Gym source code may be publicly viewable, but the project is
+**not currently offered under an open-source license**.
 
-Bug reports, testing feedback, documentation suggestions, and feature
-ideas are welcome. Code contributions are currently accepted only by
-prior arrangement while the long-term collaboration and licensing
-model is being determined.
+Unless permission is granted separately, public source availability does
+not grant permission to redistribute Jungle Gym, publish modified
+versions, or release derivative versions under another name.
 
-A future open-source release remains under consideration.
+Bug reports, testing feedback, documentation corrections, and feature
+ideas are welcome. Code contributions are accepted only by prior
+arrangement while the long-term collaboration model is being
+determined.
 
-## Project roadmap
+See [LEGAL.md](LEGAL.md) for the current project terms.
 
-Near-term priorities include:
+## Near-term release priorities
 
-- Windows packaging and testing
-- Windows installation documentation
-- macOS release refinement
-- Apple Silicon testing
-- Release checksums
-- GitHub issue and release workflows
-- Code signing and notarization research
-- Additional diagnostics and support tools
+Before the first public beta:
+
+- Complete sustained multi-credit regression testing
+- Verify career/session data integrity after real-world play
+- Complete the final Windows clean-install regression
+- Refresh and validate release documentation
+- Produce release checksums
+- Publish a GitHub prerelease and enable issue reporting
+- Perform a macOS regression pass before publishing a new macOS build
+
+Features that are useful but not required for the first beta remain on
+the post-beta roadmap.
 
 ## Unofficial project notice
 
 Jungle Gym is unofficial fan software.
 
-It is not affiliated with, sponsored by, or endorsed by Nintendo or
-the MAME project.
+It is not affiliated with, authorized by, sponsored by, or endorsed by
+Nintendo or the MAME project.
 
 Jungle Gym does not distribute MAME, Donkey Kong, game ROMs, or other
 third-party game assets. Users are responsible for supplying and using
 their own lawful copies.
 
-Donkey Kong, Nintendo, MAME, and other names and marks referenced by
-the project belong to their respective owners.
-
-The Jungle Gym name, application artwork, interface, and original
-project materials are independently created.
-
-Rights holders may contact the developer regarding concerns about the
-project.
+Third-party names, marks, and intellectual property belong to their
+respective owners.
 
 ## Contact
 
