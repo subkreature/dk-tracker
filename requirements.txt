@@ -1,0 +1,4 @@
+# Jungle Gym runtime dependencies
+# Development baseline: Python 3.14.3
+
+pywebview==6.2.1
