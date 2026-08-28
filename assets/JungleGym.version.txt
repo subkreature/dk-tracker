@@ -45,7 +45,7 @@ VSVersionInfo(
                         ),
                         StringStruct(
                             u'ProductVersion',
-                            u'0.1.0 (Build 1)',
+                            u'0.1.0-beta.1',
                         ),
                     ],
                 ),

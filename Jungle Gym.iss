@@ -1,5 +1,5 @@
 #define MyAppName "Jungle Gym"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.0-beta.1"
 #define MyAppPublisher "Subkreature (SK.)"
 #define MyAppExeName "Jungle Gym.exe"
 
@@ -16,7 +16,7 @@ DisableProgramGroupPage=yes
 SetupArchitecture=x64
 
 OutputDir=installer-output
-OutputBaseFilename=Jungle-Gym-0.1.0-Setup
+OutputBaseFilename=Jungle-Gym-0.1.0-beta.1-Setup
 
 SetupIconFile=assets\JungleGym.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
