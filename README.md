@@ -26,9 +26,9 @@ Jungle Gym is an unofficial, independently developed fan project.
 
 ## Current status
 
-Jungle Gym is currently in **public-beta preparation**.
+Jungle Gym is currently in **public beta**.
 
-The next planned public build is:
+The current public beta is:
 
 ```text
 v0.1.0-beta.1
@@ -105,7 +105,7 @@ tested.
 
 ### Windows
 
-The first public beta is planned to ship as a Windows x64 installer.
+The current public beta ships as a Windows x64 installer.
 
 See:
 

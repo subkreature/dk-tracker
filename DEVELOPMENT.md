@@ -11,7 +11,7 @@ release workflow, and known remaining work.
 The immediate goal is a stable public beta rather than completion of the
 entire feature roadmap.
 
-Planned first public build:
+First public beta:
 
 ```text
 v0.1.0-beta.1

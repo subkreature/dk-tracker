@@ -17,13 +17,9 @@ Pre-release builds may additionally use suffixes such as:
 Jungle Gym is still early software, so features and internal behavior
 may change between beta releases.
 
-## [Unreleased]
+## [0.1.0-beta.1] - 2026-08-29
 
-Public-beta preparation for the next planned build:
-
-```text
-v0.1.0-beta.1
-```
+First public beta release.
 
 ### Added
 
