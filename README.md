@@ -22,6 +22,8 @@ gameplay locally, and turns individual games into a persistent career
 dashboard with live telemetry, personal bests, performance history, and
 detailed session views.
 
+Jungle Gym is independently developed and largely vibe-coded software.
+
 Jungle Gym is an unofficial, independently developed fan project.
 
 ## Current status
