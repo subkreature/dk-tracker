@@ -24,6 +24,28 @@ detailed session views.
 
 Jungle Gym is an unofficial fan project, independently developed and largely vibe-coded.
 
+## Screenshots
+
+### Career analytics
+
+![Jungle Gym career analytics dashboard](docs/screenshots/career-analytics.png)
+
+### Live gameplay tracking
+
+![Jungle Gym tracking a live Donkey Kong game in MAME](docs/screenshots/live-session.png)
+
+### Career history
+
+![Jungle Gym recent sessions and excluded games](docs/screenshots/career-history.png)
+
+### Session details
+
+![Jungle Gym individual session summary](docs/screenshots/session-details.png)
+
+### Score progression
+
+![Jungle Gym score progression and gameplay event graph](docs/screenshots/score-progression.png)
+
 ## Current status
 
 Jungle Gym is currently in **public beta**.
