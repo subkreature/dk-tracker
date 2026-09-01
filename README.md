@@ -269,9 +269,3 @@ their own lawful copies.
 
 Third-party names, marks, and intellectual property belong to their
 respective owners.
-
-## Contact
-
-Created by **Subkreature (SK.)**
-
-[Visit Subkreature online](https://linktr.ee/subkreature)

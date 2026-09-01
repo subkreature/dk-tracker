@@ -112,11 +112,6 @@ compatibility, or other damages resulting from use of the application.
 
 ## Rights-holder concerns
 
-Rights holders may contact Subkreature regarding concerns involving
-Jungle Gym or material associated with the project.
+Rights holders with concerns involving Jungle Gym or material associated with the
+project may contact the developer through the project's GitHub repository.
 
-## Contact
-
-**Subkreature (SK.)**
-
-https://linktr.ee/subkreature

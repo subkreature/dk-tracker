@@ -125,11 +125,3 @@ database containing player profiles or career histories.
 
 If future versions add optional online features, this notice should be
 updated before those features are released.
-
-## Contact
-
-Questions about Jungle Gym's privacy behavior may be directed to:
-
-**Subkreature (SK.)**
-
-https://linktr.ee/subkreature
